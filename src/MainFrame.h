@@ -8,6 +8,7 @@
 
 class ServerConfigDialog;
 class FileExplorerFrame;
+class DirectoryConfigDialog; // 添加前向声明
 
 /**
  * @brief 主窗口类
@@ -24,6 +25,7 @@ private:
     wxButton* m_editBtn;
     wxButton* m_deleteBtn;
     wxButton* m_connectBtn;
+    wxButton* m_storageBtn; // 添加存储位置按钮
     
     // 数据
     ServerConfig* m_config;
@@ -36,6 +38,7 @@ private:
     void OnConnect(wxCommandEvent& event);
     void OnServerSelected(wxListEvent& event);
     void OnServerDoubleClick(wxListEvent& event);
+    void OnStorageLocation(wxCommandEvent& event); // 添加存储位置处理方法
     void OnClose(wxCloseEvent& event);
     
     // 辅助方法
@@ -53,7 +56,8 @@ enum {
     ID_EDIT_SERVER,
     ID_DELETE_SERVER,
     ID_CONNECT_SERVER,
-    ID_SERVER_LIST
+    ID_SERVER_LIST,
+    ID_STORAGE_LOCATION // 添加存储位置事件ID
 };
 
 #endif

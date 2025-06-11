@@ -16,6 +16,7 @@ set(SOURCES
     src/ServerConfigDialog.cpp
     src/FileExplorerFrame.cpp
     src/UploadProgressDialog.cpp
+    src/DirectoryConfigDialog.cpp
 )
 
 # 头文件
@@ -25,6 +26,7 @@ set(HEADERS
     src/ServerConfigDialog.h
     src/FileExplorerFrame.h
     src/UploadProgressDialog.h
+    src/DirectoryConfigDialog.h
 )
 
 # 创建可执行文件

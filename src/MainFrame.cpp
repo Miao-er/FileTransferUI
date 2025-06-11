@@ -1,6 +1,7 @@
 #include "MainFrame.h"
 #include "ServerConfigDialog.h"
 #include "FileExplorerFrame.h"
+#include "DirectoryConfigDialog.h" // 添加包含
 #include <wx/msgdlg.h>
 
 wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
@@ -8,6 +9,7 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_BUTTON(ID_EDIT_SERVER, MainFrame::OnEdit)
     EVT_BUTTON(ID_DELETE_SERVER, MainFrame::OnDelete)
     EVT_BUTTON(ID_CONNECT_SERVER, MainFrame::OnConnect)
+    EVT_BUTTON(ID_STORAGE_LOCATION, MainFrame::OnStorageLocation) // 添加事件绑定
     EVT_LIST_ITEM_SELECTED(ID_SERVER_LIST, MainFrame::OnServerSelected)
     EVT_LIST_ITEM_ACTIVATED(ID_SERVER_LIST, MainFrame::OnServerDoubleClick)
     EVT_CLOSE(MainFrame::OnClose)
@@ -57,6 +59,7 @@ void MainFrame::InitializeUI() {
     m_editBtn = new wxButton(panel, ID_EDIT_SERVER, "Edit");
     m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "Delete(-)");
     m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "Connect");
+    m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, "修改本地存储位置"); // 添加新按钮
     
     // 初始状态下禁用某些按钮
     m_editBtn->Enable(false);
@@ -71,6 +74,7 @@ void MainFrame::InitializeUI() {
     btnSizer->Add(m_editBtn, 0, wxRIGHT, 5);
     btnSizer->Add(m_deleteBtn, 0, wxRIGHT, 5);
     btnSizer->AddStretchSpacer();
+    btnSizer->Add(m_storageBtn, 0, wxRIGHT, 10); // 添加存储位置按钮
     btnSizer->Add(m_connectBtn, 0);
     
     mainSizer->Add(new wxStaticText(panel, wxID_ANY, _T("列表:")), 
@@ -200,4 +204,16 @@ void MainFrame::OnClose(wxCloseEvent& event) {
 }
 
     event.Skip();
+}
+
+void MainFrame::OnStorageLocation(wxCommandEvent& event) {
+    DirectoryConfigDialog dialog(this);
+    if (dialog.ShowModal() == wxID_OK) {
+        wxString selectedPath = dialog.GetSelectedPath();
+        SetStatusText(wxString::Format("本地存储位置已更新: %s", selectedPath));
+        
+        // 可选：显示成功消息
+        wxMessageBox(wxString::Format("本地存储位置已成功设置为:\n%s", selectedPath),
+                     "设置成功", wxOK | wxICON_INFORMATION, this);
+    }
 }
