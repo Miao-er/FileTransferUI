@@ -10,8 +10,8 @@
  */
 class ServerConfigDialog : public wxDialog {
 public:
-    ServerConfigDialog(wxWindow* parent, const wxString& title = "服务器配置");
-    ServerConfigDialog(wxWindow* parent, const ServerInfo& server, const wxString& title = "编辑服务器");
+    ServerConfigDialog(wxWindow* parent, const wxString& title = "Server Config");
+    ServerConfigDialog(wxWindow* parent, const ServerInfo& server, const wxString& title = "Edit Server Config");
     
     /**
      * @brief 获取配置的服务器信息

@@ -14,7 +14,7 @@ wxBEGIN_EVENT_TABLE(UploadProgressDialog, wxDialog)
 wxEND_EVENT_TABLE()
 
 UploadProgressDialog::UploadProgressDialog(wxWindow* parent, const wxString& filepath)
-    : wxDialog(parent, wxID_ANY, "文件上传进度", 
+    : wxDialog(parent, wxID_ANY, "Upload Progress", 
                wxDefaultPosition, wxSize(400, 200),
                wxDEFAULT_DIALOG_STYLE),
       m_filepath(filepath), m_uploadThread(nullptr), m_cancelled(false) {
@@ -23,9 +23,8 @@ UploadProgressDialog::UploadProgressDialog(wxWindow* parent, const wxString& fil
 }
 
 UploadProgressDialog::~UploadProgressDialog() {
-    if (m_uploadThread && m_uploadThread->IsRunning()) {
-        m_uploadThread->Delete();
-    }
+    printf("UploadProgressDialog destructor called\n");
+    cleanupThread();
 }
 
 void UploadProgressDialog::InitializeUI() {
@@ -36,10 +35,10 @@ void UploadProgressDialog::InitializeUI() {
     wxString filename = fn.GetFullName();
     wxULongLong fileSize = fn.GetSize();
     
-    wxStaticText* fileLabel = new wxStaticText(panel, wxID_ANY, "上传文件:");
+    wxStaticText* fileLabel = new wxStaticText(panel, wxID_ANY, "upload file:");
     wxStaticText* fileText = new wxStaticText(panel, wxID_ANY, filename);
-    
-    wxStaticText* sizeLabel = new wxStaticText(panel, wxID_ANY, "文件大小:");
+
+    wxStaticText* sizeLabel = new wxStaticText(panel, wxID_ANY, "file size:");
     wxStaticText* sizeText = new wxStaticText(panel, wxID_ANY, FormatFileSize(fileSize));
     
     // 进度条
@@ -47,11 +46,11 @@ void UploadProgressDialog::InitializeUI() {
     m_progressText = new wxStaticText(panel, wxID_ANY, "0%");
     
     // 状态文本
-    m_statusText = new wxStaticText(panel, wxID_ANY, "准备上传...");
+    m_statusText = new wxStaticText(panel, wxID_ANY, "prepare to upload...");
     
     // 取消按钮
-    wxButton* cancelBtn = new wxButton(panel, wxID_CANCEL, "取消");
-    
+    wxButton* cancelBtn = new wxButton(panel, wxID_CANCEL, "Cancel");
+
     // 布局
     wxFlexGridSizer* infoSizer = new wxFlexGridSizer(2, 2, 5, 10);
     infoSizer->AddGrowableCol(1);
@@ -71,6 +70,12 @@ void UploadProgressDialog::InitializeUI() {
     mainSizer->Add(cancelBtn, 0, wxALIGN_CENTER | wxALL, 15);
     
     panel->SetSizer(mainSizer);
+
+    // 修正：让panel填满整个对话框，避免GTK负高度警告
+    wxBoxSizer* dlgSizer = new wxBoxSizer(wxVERTICAL);
+    dlgSizer->Add(panel, 1, wxEXPAND);
+    this->SetSizerAndFit(dlgSizer);
+    this->Layout();
 }
 
 wxString UploadProgressDialog::FormatFileSize(wxULongLong size) {
@@ -90,12 +95,14 @@ bool UploadProgressDialog::StartUpload() {
     m_uploadThread = new UploadThread(this, m_filepath);
     
     if (m_uploadThread->Create() != wxTHREAD_NO_ERROR) {
+        printf("Failed to create upload thread\n");
         delete m_uploadThread;
         m_uploadThread = nullptr;
         return false;
     }
     
     if (m_uploadThread->Run() != wxTHREAD_NO_ERROR) {
+        printf("Failed to run upload thread\n");
         delete m_uploadThread;
         m_uploadThread = nullptr;
         return false;
@@ -121,35 +128,36 @@ void UploadProgressDialog::OnComplete(wxCommandEvent& event) {
     bool success = event.GetInt() == 1;
     
     if (success) {
-        UpdateProgress(100, "上传完成！");
+        UpdateProgress(100, "Upload Completed!");
         // 延迟一点时间让用户看到完成状态
         wxMilliSleep(500);
+        printf("Upload completed successfully\n");
         EndModal(wxID_OK);
     } else {
-        m_statusText->SetLabel("上传失败！");
+        m_statusText->SetLabel("Upload failed!");
+        printf("Upload failed\n");
         EndModal(wxID_CANCEL);
     }
 }
 
-void UploadProgressDialog::OnCancel(wxCommandEvent& event) {
-    m_cancelled = true;
-    
+void UploadProgressDialog::cleanupThread() {
     if (m_uploadThread && m_uploadThread->IsRunning()) {
         m_uploadThread->Delete();
         // 等待线程结束
+    }
+    while (m_uploadThread) {
         wxMilliSleep(100);
     }
-    
+}
+void UploadProgressDialog::OnCancel(wxCommandEvent& event) {
+    m_cancelled = true;
+    printf("Upload cancelled by user\n");
     EndModal(wxID_CANCEL);
 }
 
 void UploadProgressDialog::OnClose(wxCloseEvent& event) {
     m_cancelled = true;
-    
-    if (m_uploadThread && m_uploadThread->IsRunning()) {
-        m_uploadThread->Delete();
-    }
-
+    printf("Upload dialog closed by user\n"); 
     EndModal(wxID_CANCEL);
 }
 
@@ -158,70 +166,39 @@ UploadThread::UploadThread(UploadProgressDialog* dialog, const wxString& filepat
     : wxThread(wxTHREAD_DETACHED), m_dialog(dialog), m_filepath(filepath) {
 }
 
+UploadThread::~UploadThread() {
+    m_dialog->m_uploadThread = nullptr; // 清理对话框中的线程引用
+    printf("UploadThread destructor called\n");
+}
 wxThread::ExitCode UploadThread::Entry() {
-    // 获取文件大小
     wxFileName fn(m_filepath);
     wxULongLong totalSize = fn.GetSize();
-    
+    printf("Starting upload for file: %s, size: %s\n", 
+           fn.GetFullName().ToStdString().c_str(), FormatFileSize(totalSize).ToStdString().c_str());
     if (totalSize == wxInvalidSize) {
-        // 发送失败事件
-        wxCommandEvent event(wxEVT_UPLOAD_COMPLETE);
-        event.SetInt(0); // 失败
-        wxPostEvent(m_dialog, event);
-        return 0;
+        wxCommandEvent evt(wxEVT_UPLOAD_COMPLETE);
+        evt.SetInt(0); // 失败
+        wxQueueEvent(m_dialog, evt.Clone());
+        return (wxThread::ExitCode)0;
     }
-    
-    // 模拟上传过程
-    const int chunkSize = 8192; // 8KB chunks
-    wxULongLong uploadedSize = 0;
-    
-    // 这里应该调用实际的 transfer_file 函数
-    // 为了演示，我们模拟上传过程
-    
-    wxFile file(m_filepath, wxFile::read);
-    if (!file.IsOpened()) {
-        wxCommandEvent event(wxEVT_UPLOAD_COMPLETE);
-        event.SetInt(0); // 失败
-        wxPostEvent(m_dialog, event);
-        return 0;
+    int percent = 0;
+    for (percent = 1; percent <= 100; ++percent) {
+        if (TestDestroy() || m_dialog->m_cancelled) break;
+        printf("Uploading... %d%%\n", percent);
+        wxMilliSleep(20);
+        wxCommandEvent evt(wxEVT_UPLOAD_PROGRESS);
+        evt.SetInt(percent);
+        evt.SetString(wxString::Format("Uploading... %d%%", percent));
+        wxQueueEvent(m_dialog, evt.Clone());
     }
-    
-    char buffer[chunkSize];
-    
-    while (uploadedSize < totalSize && !TestDestroy()) {
-        size_t bytesToRead = wxMin(chunkSize, (totalSize - uploadedSize).GetLo());
-        size_t bytesRead = file.Read(buffer, bytesToRead);
-        
-        if (bytesRead == 0) break;
-        
-        // 这里应该调用 transfer_file 函数
-        // transfer_file(buffer, bytesRead);
-        
-        // 模拟网络传输延迟
-        wxMilliSleep(50); // 减少延迟时间，从500改为50
-        
-        uploadedSize += bytesRead;
-        
-        // 计算进度百分比
-        int percentage = (uploadedSize * 100 / totalSize).GetLo();
-        
-        // 发送进度更新事件
-        wxCommandEvent progressEvent(wxEVT_UPLOAD_PROGRESS);
-        progressEvent.SetInt(percentage);
-        progressEvent.SetString(wxString::Format("已上传: %s / %s", 
-                                               FormatFileSize(uploadedSize),
-                                               FormatFileSize(totalSize)));
-        wxPostEvent(m_dialog, progressEvent);
-    }
-    
-    file.Close();
-    
-    // 发送完成事件
-    wxCommandEvent completeEvent(wxEVT_UPLOAD_COMPLETE);
-    completeEvent.SetInt(TestDestroy() ? 0 : 1); // 成功或被取消
-    wxPostEvent(m_dialog, completeEvent);
-    
-    return 0;
+    printf("Upload progress: %d%%\n", percent);
+    wxCommandEvent evt(wxEVT_UPLOAD_COMPLETE);
+    printf("Upload complete with status: %d%%\n", percent);
+    evt.SetInt(percent == 101? 1 : 0); // 成功
+    printf("Upload thread completed with status: %d\n", evt.GetInt());
+    wxQueueEvent(m_dialog, evt.Clone());
+    printf("Exiting upload thread\n");
+    return (wxThread::ExitCode)0;
 }
 
 wxString UploadThread::FormatFileSize(wxULongLong size) {

@@ -14,7 +14,7 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
 wxEND_EVENT_TABLE()
 
 MainFrame::MainFrame() 
-    : wxFrame(nullptr, wxID_ANY, "文件上传客户端", 
+    : wxFrame(nullptr, wxID_ANY, "File Transfer Client", 
               wxDefaultPosition, wxSize(800, 600)),
       m_config(nullptr), m_explorerFrame(nullptr) {
     
@@ -30,7 +30,7 @@ MainFrame::MainFrame()
     
     // 创建状态栏
     CreateStatusBar();
-    SetStatusText("就绪");
+    SetStatusText("Ready");
 }
 
 MainFrame::~MainFrame() {
@@ -48,15 +48,15 @@ void MainFrame::InitializeUI() {
                                   wxLC_REPORT | wxLC_SINGLE_SEL);
     
     // 设置列标题
-    m_serverList->AppendColumn("名称", wxLIST_FORMAT_LEFT, 200);
-    m_serverList->AppendColumn("IP地址", wxLIST_FORMAT_LEFT, 150);
-    m_serverList->AppendColumn("端口", wxLIST_FORMAT_LEFT, 100);
+    m_serverList->AppendColumn("name", wxLIST_FORMAT_LEFT, 200);
+    m_serverList->AppendColumn("IP", wxLIST_FORMAT_LEFT, 150);
+    m_serverList->AppendColumn("port", wxLIST_FORMAT_LEFT, 100);
     
     // 创建按钮
-    m_addBtn = new wxButton(panel, ID_ADD_SERVER, "添加(+)");
-    m_editBtn = new wxButton(panel, ID_EDIT_SERVER, "编辑");
-    m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "删除");
-    m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "连接");
+    m_addBtn = new wxButton(panel, ID_ADD_SERVER, "Add(+)");
+    m_editBtn = new wxButton(panel, ID_EDIT_SERVER, "Edit");
+    m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "Delete(-)");
+    m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "Connect");
     
     // 初始状态下禁用某些按钮
     m_editBtn->Enable(false);
@@ -73,7 +73,7 @@ void MainFrame::InitializeUI() {
     btnSizer->AddStretchSpacer();
     btnSizer->Add(m_connectBtn, 0);
     
-    mainSizer->Add(new wxStaticText(panel, wxID_ANY, "服务器列表:"), 
+    mainSizer->Add(new wxStaticText(panel, wxID_ANY, _T("列表:")), 
                    0, wxALL, 10);
     mainSizer->Add(m_serverList, 1, wxEXPAND | wxLEFT | wxRIGHT, 10);
     mainSizer->Add(btnSizer, 0, wxEXPAND | wxALL, 10);
@@ -113,7 +113,7 @@ void MainFrame::OnAdd(wxCommandEvent& event) {
         m_config->AddServer(server);
         m_config->SaveConfig();
         RefreshServerList();
-        SetStatusText("服务器配置已添加");
+        SetStatusText("Server config added successfully");
     }
 }
 
@@ -122,14 +122,14 @@ void MainFrame::OnEdit(wxCommandEvent& event) {
     if (index == -1) return;
     
     const ServerInfo& server = m_config->GetServer(index);
-    ServerConfigDialog dialog(this, server, "编辑服务器");
-    
+    ServerConfigDialog dialog(this, server, "Edit Server Config");
+
     if (dialog.ShowModal() == wxID_OK) {
         ServerInfo newServer = dialog.GetServerInfo();
         m_config->UpdateServer(index, newServer);
         m_config->SaveConfig();
         RefreshServerList();
-        SetStatusText("服务器配置已更新");
+        SetStatusText("Server config updated successfully");
     }
 }
 
@@ -138,13 +138,13 @@ void MainFrame::OnDelete(wxCommandEvent& event) {
     if (index == -1) return;
     
     const ServerInfo& server = m_config->GetServer(index);
-    wxString message = wxString::Format("确定要删除服务器 '%s' 吗？", server.name);
-    
-    if (wxMessageBox(message, "确认删除", wxYES_NO | wxICON_QUESTION) == wxYES) {
+    wxString message = wxString::Format("Are you sure you want to delete the server '%s'?", server.name);
+
+    if (wxMessageBox(message, "Confirm Delete", wxYES_NO | wxICON_QUESTION) == wxYES) {
         m_config->RemoveServer(index);
         m_config->SaveConfig();
         RefreshServerList();
-        SetStatusText("服务器配置已删除");
+        SetStatusText("Server config deleted successfully");
     }
 }
 
@@ -164,11 +164,10 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
     // 创建新的文件浏览器窗口
     m_explorerFrame = new FileExplorerFrame(this, server);
     m_explorerFrame->Show(true);
-    
     // 隐藏主窗口
     Hide();
-    
-    SetStatusText(wxString::Format("已连接到 %s", server.name));
+
+    SetStatusText(wxString::Format("Connected to %s", server.name));
 }
 
 void MainFrame::OnServerSelected(wxListEvent& event) {
@@ -177,8 +176,8 @@ void MainFrame::OnServerSelected(wxListEvent& event) {
 
 void MainFrame::OnServerDoubleClick(wxListEvent& event) {
     // 创建一个命令事件对象并调用连接处理函数
-    wxCommandEvent cmdEvent(wxEVT_COMMAND_BUTTON_CLICKED, ID_CONNECT_SERVER);
-    OnConnect(cmdEvent);
+    wxCommandEvent evt(wxEVT_BUTTON, ID_CONNECT_SERVER);
+    OnConnect(evt);
 }
 
 void MainFrame::OnFileExplorerFrameClose()

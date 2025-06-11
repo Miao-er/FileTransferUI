@@ -47,6 +47,7 @@ private:
     
     // 事件处理
     void OnDirSelected(wxTreeEvent& event);
+    void OnDirExpanding(wxTreeEvent& event);
     void OnFileSelected(wxListEvent& event);
     void OnFileDoubleClick(wxListEvent& event);
     void OnUpload(wxCommandEvent& event);

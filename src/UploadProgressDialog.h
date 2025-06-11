@@ -26,7 +26,7 @@ public:
      * @return 是否成功完成上传
      */
     bool StartUpload();
-
+    void cleanupThread();
 private:
     // UI 组件
     wxGauge* m_progressGauge;
@@ -48,7 +48,6 @@ private:
     void OnClose(wxCloseEvent& event);
     void OnProgress(wxCommandEvent& event);
     void OnComplete(wxCommandEvent& event);
-    
     friend class UploadThread;
     
     wxDECLARE_EVENT_TABLE();
@@ -60,6 +59,7 @@ private:
 class UploadThread : public wxThread {
 public:
     UploadThread(UploadProgressDialog* dialog, const wxString& filepath);
+    ~UploadThread();
     
 protected:
     virtual ExitCode Entry() override;

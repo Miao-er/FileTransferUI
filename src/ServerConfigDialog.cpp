@@ -26,20 +26,20 @@ void ServerConfigDialog::InitializeUI() {
     wxPanel* panel = new wxPanel(this);
     
     // 创建控件
-    wxStaticText* nameLabel = new wxStaticText(panel, wxID_ANY, "服务器名称:");
+    wxStaticText* nameLabel = new wxStaticText(panel, wxID_ANY, "name:");
     m_nameCtrl = new wxTextCtrl(panel, wxID_ANY);
     
-    wxStaticText* ipLabel = new wxStaticText(panel, wxID_ANY, "IP地址:");
+    wxStaticText* ipLabel = new wxStaticText(panel, wxID_ANY, "IP:");
     m_ipCtrl = new wxTextCtrl(panel, wxID_ANY);
     
-    wxStaticText* portLabel = new wxStaticText(panel, wxID_ANY, "端口号:");
+    wxStaticText* portLabel = new wxStaticText(panel, wxID_ANY, "port:");
     m_portCtrl = new wxSpinCtrl(panel, wxID_ANY, wxEmptyString, 
                                 wxDefaultPosition, wxDefaultSize,
                                 wxSP_ARROW_KEYS, 1, 65535, 8080);
     
     // 按钮
-    wxButton* okBtn = new wxButton(panel, wxID_OK, "确定");
-    wxButton* cancelBtn = new wxButton(panel, wxID_CANCEL, "取消");
+    wxButton* okBtn = new wxButton(panel, wxID_OK, "Enter");
+    wxButton* cancelBtn = new wxButton(panel, wxID_CANCEL, "Cancel");
     
     // 布局
     wxFlexGridSizer* gridSizer = new wxFlexGridSizer(3, 2, 10, 10);
@@ -82,13 +82,13 @@ void ServerConfigDialog::OnCancel(wxCommandEvent& event) {
 
 bool ServerConfigDialog::ValidateInput() {
     if (m_nameCtrl->GetValue().IsEmpty()) {
-        wxMessageBox("请输入服务器名称", "输入错误", wxOK | wxICON_WARNING);
+        wxMessageBox("Please enter server name", "Input Error", wxOK | wxICON_WARNING);
         m_nameCtrl->SetFocus();
         return false;
     }
     
     if (m_ipCtrl->GetValue().IsEmpty()) {
-        wxMessageBox("请输入IP地址", "输入错误", wxOK | wxICON_WARNING);
+        wxMessageBox("Please enter IP address", "Input Error", wxOK | wxICON_WARNING);
         m_ipCtrl->SetFocus();
         return false;
     }

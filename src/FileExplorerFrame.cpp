@@ -6,7 +6,7 @@
 
 wxBEGIN_EVENT_TABLE(FileExplorerFrame, wxFrame)
     EVT_TREE_SEL_CHANGED(wxID_ANY, FileExplorerFrame::OnDirSelected)
-
+    EVT_TREE_ITEM_EXPANDING(wxID_ANY, FileExplorerFrame::OnDirExpanding)
     EVT_LIST_ITEM_SELECTED(wxID_ANY, FileExplorerFrame::OnFileSelected)
     EVT_LIST_ITEM_ACTIVATED(wxID_ANY, FileExplorerFrame::OnFileDoubleClick)
     EVT_BUTTON(wxID_UP, FileExplorerFrame::OnUpDirectory)
@@ -17,7 +17,7 @@ wxEND_EVENT_TABLE()
 
 FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server)
     : wxFrame(parent, wxID_ANY, 
-              wxString::Format("文件浏览器 - %s", server.name),
+              wxString::Format("File Explorer - %s", server.name),
               wxDefaultPosition, wxSize(900, 700)),
       m_serverInfo(server), m_progressDialog(nullptr) {
     
@@ -28,20 +28,14 @@ FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server)
     m_currentPath = wxFileName::GetPathSeparator();
     PopulateFileList(m_currentPath);
     
-    UpdateStatus(wxString::Format("已连接到服务器: %s:%d", server.ip, server.port));
+    UpdateStatus(wxString::Format("Connected to Server: %s:%d", server.ip, server.port));
 }
 
 FileExplorerFrame::~FileExplorerFrame() {
-    // 安全地清理进度对话框
-    printf("FileExplorerFrame::~FileExplorerFrame() start\n");
     if (m_progressDialog) {
-        if (m_progressDialog->IsModal()) {
-            m_progressDialog->EndModal(wxID_CANCEL);
-    }
         m_progressDialog->Destroy();
         m_progressDialog = nullptr;
     }
-    printf("FileExplorerFrame::~FileExplorerFrame()\n");
     // 清理文件列表中的内存
     for (long i = 0; i < m_fileList->GetItemCount(); ++i) {
         wxString* path = reinterpret_cast<wxString*>(m_fileList->GetItemData(i));
@@ -66,22 +60,22 @@ void FileExplorerFrame::InitializeUI() {
                                 wxLC_REPORT | wxLC_SINGLE_SEL);
     
     // 设置文件列表的列
-    m_fileList->AppendColumn("名称", wxLIST_FORMAT_LEFT, 300);
-    m_fileList->AppendColumn("大小", wxLIST_FORMAT_RIGHT, 100);
-    m_fileList->AppendColumn("类型", wxLIST_FORMAT_LEFT, 100);
+    m_fileList->AppendColumn("name", wxLIST_FORMAT_LEFT, 300);
+    m_fileList->AppendColumn("size", wxLIST_FORMAT_RIGHT, 100);
+    m_fileList->AppendColumn("type", wxLIST_FORMAT_LEFT, 100);
     
     // 分割窗口设置
     m_splitter->SplitVertically(m_dirTree, m_fileList, 250);
     m_splitter->SetMinimumPaneSize(200);
     
     // 按钮 - 添加返回上级按钮
-    m_upBtn = new wxButton(panel, wxID_UP, "返回上级");
-    m_uploadBtn = new wxButton(panel, wxID_APPLY, "上传选中文件");
-    m_backBtn = new wxButton(panel, wxID_BACKWARD, "返回主界面");
+    m_upBtn = new wxButton(panel, wxID_UP, "Back");
+    m_uploadBtn = new wxButton(panel, wxID_APPLY, "Upload");
+    m_backBtn = new wxButton(panel, wxID_BACKWARD, "Return");
     m_uploadBtn->Enable(false);
     
     // 状态文本
-    m_statusText = new wxStaticText(panel, wxID_ANY, "就绪");
+    m_statusText = new wxStaticText(panel, wxID_ANY, "Ready");
     
     // 布局
     wxBoxSizer* btnSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -109,7 +103,7 @@ void FileExplorerFrame::InitializeUI() {
 void FileExplorerFrame::PopulateDirectoryTree() {
     m_dirTree->DeleteAllItems();
     // 添加根节点
-    wxTreeItemId rootId = m_dirTree->AddRoot("文件系统");
+    wxTreeItemId rootId = m_dirTree->AddRoot("/");
     
     // 获取所有驱动器（Windows）或根目录（Unix）
 #ifdef __WXMSW__
@@ -120,40 +114,52 @@ void FileExplorerFrame::PopulateDirectoryTree() {
 }
 #else
     // Unix系统，从根目录开始
-    wxTreeItemId rootDirId = m_dirTree->AppendItem(rootId, "/");
-    AddDirectoryChildren(rootDirId, "/");
+    // wxTreeItemId rootDirId = m_dirTree->AppendItem(rootId, "/");
+    m_dirTree->SetItemData(rootId, new TreeItemData("/"));
+    m_dirTree->SetItemHasChildren(rootId, true);
+    // AddDirectoryChildren(rootId, "/");
 #endif
-
     m_dirTree->Expand(rootId);
     }
     
 void FileExplorerFrame::AddDirectoryChildren(wxTreeItemId parent, const wxString& path) {
     wxDir dir(path);
     if (!dir.IsOpened()) return;
-    
+
+    // 先清空所有子项
+    m_dirTree->DeleteChildren(parent);
+
+    wxArrayString dirNames;
     wxString filename;
     bool cont = dir.GetFirst(&filename, wxEmptyString, wxDIR_DIRS);
-    
     while (cont) {
+        if (!filename.StartsWith(".")) {
+            dirNames.Add(filename);
+        }
+        cont = dir.GetNext(&filename);
+    }
+    dirNames.Sort(); // 字典序排序
+
+    if (dirNames.IsEmpty()) {
+        // 空文件夹不添加任何子项
+        return;
+    }
+
+    for (auto& dirname : dirNames) {
         wxString fullPath = path;
         if (!fullPath.EndsWith(wxFileName::GetPathSeparator())) {
             fullPath += wxFileName::GetPathSeparator();
-}
-        fullPath += filename;
+        }
+        fullPath += dirname;
 
-        wxTreeItemId childId = m_dirTree->AppendItem(parent, filename);
-        // 使用自定义的 TreeItemData
+        wxTreeItemId childId = m_dirTree->AppendItem(parent, dirname);
         m_dirTree->SetItemData(childId, new TreeItemData(fullPath));
-        
-        // 添加一个虚拟子项，以便显示展开图标
-        if (HasSubdirectories(fullPath)) {
-            m_dirTree->AppendItem(childId, "...");
-}
-
-        cont = dir.GetNext(&filename);
+        // 折叠时需要显示可展开符号，所以添加一个虚拟子项
+        //m_dirTree->AppendItem(childId, "...");
+        //确保显示折叠符号
+        m_dirTree->SetItemHasChildren(childId, true);
     }
 }
-
 bool FileExplorerFrame::HasSubdirectories(const wxString& path) {
     wxDir dir(path);
     if (!dir.IsOpened()) return false;
@@ -163,37 +169,40 @@ bool FileExplorerFrame::HasSubdirectories(const wxString& path) {
 }
 
 void FileExplorerFrame::PopulateFileList(const wxString& path) {
-    printf("PopulateFileList: Starting with path: %s\n", path.ToStdString().c_str());
-    
+    //printf("PopulateFileList: Starting with path: %s\n", path.ToStdString().c_str());
+    m_currentPath = path;
+    if (!m_currentPath.EndsWith(wxFileName::GetPathSeparator())) {
+            m_currentPath += wxFileName::GetPathSeparator();
+        }
     // 清理旧的内存
     for (long i = 0; i < m_fileList->GetItemCount(); ++i) {
         wxString* oldPath = reinterpret_cast<wxString*>(m_fileList->GetItemData(i));
         delete oldPath;
     }
-    
     m_fileList->DeleteAllItems();
-    m_currentPath = path;
-    
-    wxDir dir(path);
+    //m_currentPath = path;
+    wxDir dir(m_currentPath);
     if (!dir.IsOpened()) {
-        printf("PopulateFileList: Cannot open directory: %s\n", path.ToStdString().c_str());
-        UpdateStatus("无法访问目录: " + path);
+        printf("PopulateFileList: Cannot open directory: %s\n", m_currentPath.ToStdString().c_str());
+        UpdateStatus("Cannot access root dir: " + m_currentPath);
         return;
     }
     
-    printf("PopulateFileList: Directory opened successfully\n");
+    //printf("PopulateFileList: Directory opened successfully\n");
     
     long index = 0;
     
     // 添加返回上级目录项（除非已经在根目录）
-    wxFileName currentDir(path);
+    wxFileName currentDir(m_currentPath);
+    //printf("PopulateFileList: Current directory: %s\n", currentDir.GetFullPath().ToStdString().c_str());
+    //printf("PopulateFileList: Current directory count: %ld\n", currentDir.GetDirCount());
     if (currentDir.GetDirCount() > 0 || !currentDir.GetVolume().IsEmpty()) {
         long itemIndex = m_fileList->InsertItem(index, "..");
-        m_fileList->SetItem(itemIndex, 1, "<上级目录>");
-        m_fileList->SetItem(itemIndex, 2, "文件夹");
+        m_fileList->SetItem(itemIndex, 1, "");
+        m_fileList->SetItem(itemIndex, 2, "folder");
         
         // 计算父目录路径
-        wxFileName parentDir(path);
+        wxFileName parentDir(m_currentPath);
         parentDir.RemoveLastDir();
         wxString parentPath = parentDir.GetPath();
         if (parentPath.IsEmpty()) {
@@ -204,79 +213,79 @@ void FileExplorerFrame::PopulateFileList(const wxString& path) {
 #endif
         }
         
-        printf("PopulateFileList: Added parent directory item: %s\n", parentPath.ToStdString().c_str());
+        //printf("PopulateFileList: Added parent directory item: %s\n", parentPath.ToStdString().c_str());
         m_fileList->SetItemData(itemIndex, reinterpret_cast<wxUIntPtr>(new wxString(parentPath)));
         index++;
     }
     
-    // 先添加目录
+    // // 先添加目录
     wxString filename;
     bool cont = dir.GetFirst(&filename, wxEmptyString, wxDIR_DIRS);
     int dirCount = 0;
     
+    // 先收集所有目录
+    wxArrayString dirNames;
+
     while (cont) {
-        // 跳过隐藏目录（以.开头的目录）
         if (!filename.StartsWith(".")) {
-        wxString fullPath = path;
+            dirNames.Add(filename);
+        }
+        cont = dir.GetNext(&filename);
+    }
+    dirNames.Sort(); // 字典序排序
+
+    for (auto& dirname : dirNames) {
+        wxString fullPath = m_currentPath;
         if (!fullPath.EndsWith(wxFileName::GetPathSeparator())) {
             fullPath += wxFileName::GetPathSeparator();
         }
-        fullPath += filename;
-        
-        long itemIndex = m_fileList->InsertItem(index, filename);
-        m_fileList->SetItem(itemIndex, 1, "<目录>");
-        m_fileList->SetItem(itemIndex, 2, "文件夹");
+        fullPath += dirname;
+        long itemIndex = m_fileList->InsertItem(index, dirname);
+        m_fileList->SetItem(itemIndex, 1, "");
+        m_fileList->SetItem(itemIndex, 2, "folder");
         m_fileList->SetItemData(itemIndex, reinterpret_cast<wxUIntPtr>(new wxString(fullPath)));
-        
-            printf("PopulateFileList: Added directory: %s -> %s\n", 
-                   filename.ToStdString().c_str(), fullPath.ToStdString().c_str());
-            
         index++;
-            dirCount++;
-    }
-        cont = dir.GetNext(&filename);
+        dirCount++;
     }
     
-    // 再添加文件
+    // 再收集所有文件
+    wxArrayString fileNames;
     cont = dir.GetFirst(&filename, wxEmptyString, wxDIR_FILES);
     int fileCount = 0;
-    
+
     while (cont) {
-        // 跳过隐藏文件（以.开头的文件）
         if (!filename.StartsWith(".")) {
-            wxString fullPath = path;
-            if (!fullPath.EndsWith(wxFileName::GetPathSeparator())) {
-                fullPath += wxFileName::GetPathSeparator();
-            }
-            fullPath += filename;
-            
-            wxFileName fn(fullPath);
-            long itemIndex = m_fileList->InsertItem(index, filename);
-            
-            // 文件大小
-            wxULongLong size = fn.GetSize();
-            wxString sizeStr = FormatFileSize(size);
-            m_fileList->SetItem(itemIndex, 1, sizeStr);
-            
-            // 文件类型
-            wxString ext = fn.GetExt().Lower();
-            wxString type = GetFileType(ext);
-            m_fileList->SetItem(itemIndex, 2, type);
-            
-            m_fileList->SetItemData(itemIndex, reinterpret_cast<wxUIntPtr>(new wxString(fullPath)));
-            
-            index++;
-            fileCount++;
+            fileNames.Add(filename);
         }
         cont = dir.GetNext(&filename);
     }
+    fileNames.Sort(); // 字典序排序
+
+    for (auto& fname : fileNames) {
+        wxString fullPath = m_currentPath;
+        if (!fullPath.EndsWith(wxFileName::GetPathSeparator())) {
+            fullPath += wxFileName::GetPathSeparator();
+        }
+        fullPath += fname;
+        wxFileName fn(fullPath);
+        long itemIndex = m_fileList->InsertItem(index, fname);
+        wxULongLong size = fn.GetSize();
+        wxString sizeStr = FormatFileSize(size);
+        m_fileList->SetItem(itemIndex, 1, sizeStr);
+        wxString ext = fn.GetExt().Lower();
+        wxString type = GetFileType(ext);
+        m_fileList->SetItem(itemIndex, 2, type);
+        m_fileList->SetItemData(itemIndex, reinterpret_cast<wxUIntPtr>(new wxString(fullPath)));
+        index++;
+        fileCount++;
+    }
     
     // 更新返回上级按钮状态
-    wxFileName currentDirCheck(path);
+    wxFileName currentDirCheck(m_currentPath);
     m_upBtn->Enable(currentDirCheck.GetDirCount() > 0 || !currentDirCheck.GetVolume().IsEmpty());
     
-    printf("PopulateFileList: Added %d directories and %d files\n", dirCount, fileCount);
-    UpdateStatus(wxString::Format("当前目录: %s (%ld 项)", path, index));
+    //printf("PopulateFileList: Added %d directories and %d files\n", dirCount, fileCount);
+    UpdateStatus(wxString::Format("currect dir: %s (%ld items)", m_currentPath, index));
 }
 
 wxString FileExplorerFrame::FormatFileSize(wxULongLong size) {
@@ -292,46 +301,43 @@ wxString FileExplorerFrame::FormatFileSize(wxULongLong size) {
 }
 
 wxString FileExplorerFrame::GetFileType(const wxString& ext) {
-    if (ext.IsEmpty()) return "文件";
+    if (ext.IsEmpty()) return "file";
     
     // 常见文件类型映射
-    if (ext == "txt" || ext == "log") return "文本文件";
-    if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif") return "图像文件";
-    if (ext == "mp4" || ext == "avi" || ext == "mkv") return "视频文件";
-    if (ext == "mp3" || ext == "wav" || ext == "flac") return "音频文件";
-    if (ext == "pdf") return "PDF文档";
-    if (ext == "doc" || ext == "docx") return "Word文档";
-    if (ext == "xls" || ext == "xlsx") return "Excel文档";
-    if (ext == "zip" || ext == "rar" || ext == "7z") return "压缩文件";
-    
-    return ext.Upper() + "文件";
+    if (ext == "txt" || ext == "log") return "text";
+    if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif") return "image";
+    if (ext == "mp4" || ext == "avi" || ext == "mkv") return "video";
+    if (ext == "mp3" || ext == "wav" || ext == "flac") return "audio";
+    if (ext == "pdf") return "PDF";
+    if (ext == "doc" || ext == "docx") return "Word";
+    if (ext == "xls" || ext == "xlsx") return "Excel";
+    if (ext == "zip" || ext == "rar" || ext == "7z") return "archive";
+
+    return ext.Upper() + " file";
+}
+
+void FileExplorerFrame::OnDirExpanding(wxTreeEvent& event) {
+    wxTreeItemId itemId = event.GetItem();
+    if (!itemId.IsOk()) return;
+
+    // 始终在展开时刷新子项
+    //printf("OnDirExpanding: Expanding item: %s\n", m_dirTree->GetItemText(itemId).ToStdString().c_str());
+    TreeItemData* data = dynamic_cast<TreeItemData*>(m_dirTree->GetItemData(itemId));
+    if (data) {
+        AddDirectoryChildren(itemId, data->GetPath());
+        PopulateFileList(data->GetPath());
+    }
 }
 
 void FileExplorerFrame::OnDirSelected(wxTreeEvent& event) {
     wxTreeItemId itemId = event.GetItem();
     if (!itemId.IsOk()) return;
     
-    // 检查是否需要展开子目录
-    if (m_dirTree->GetChildrenCount(itemId) == 1) {
-        wxTreeItemIdValue cookie;
-        wxTreeItemId childId = m_dirTree->GetFirstChild(itemId, cookie);
-        if (m_dirTree->GetItemText(childId) == "...") {
-            // 删除虚拟子项并添加真实子项
-            m_dirTree->Delete(childId);
-            
-            // 使用自定义的 TreeItemData
-            TreeItemData* data = dynamic_cast<TreeItemData*>(m_dirTree->GetItemData(itemId));
-            if (data) {
-                AddDirectoryChildren(itemId, data->GetPath());
-    }
-        }
-    }
-    
     // 获取选中目录的路径
     TreeItemData* data = dynamic_cast<TreeItemData*>(m_dirTree->GetItemData(itemId));
     if (data) {
         PopulateFileList(data->GetPath());
-}
+    }
 }
 
 void FileExplorerFrame::OnFileSelected(wxListEvent& event) {
@@ -343,127 +349,118 @@ void FileExplorerFrame::OnFileSelected(wxListEvent& event) {
         return;
     }
     
-    printf("OnFileSelected: path = %s\n", fullPath->ToStdString().c_str());
+    //printf("OnFileSelected: path = %s\n", fullPath->ToStdString().c_str());
     
     if (wxFileName::FileExists(*fullPath)) {
         m_selectedFile = *fullPath;
         m_uploadBtn->Enable(true);
-        UpdateStatus("已选择文件: " + wxFileName(*fullPath).GetFullName());
-        printf("OnFileSelected: Selected file: %s\n", fullPath->ToStdString().c_str());
+        UpdateStatus("Selected file: " + wxFileName(*fullPath).GetFullName());
+        //printf("OnFileSelected: Selected file: %s\n", fullPath->ToStdString().c_str());
     } else if (wxFileName::DirExists(*fullPath)) {
         m_uploadBtn->Enable(false);
-        UpdateStatus("已选择目录: " + *fullPath + " (双击进入)");
-        printf("OnFileSelected: Selected directory: %s\n", fullPath->ToStdString().c_str());
+        UpdateStatus("Selected directory: " + *fullPath + " (double-click to enter)");
+        //printf("OnFileSelected: Selected directory: %s\n", fullPath->ToStdString().c_str());
     } else {
         m_uploadBtn->Enable(false);
-        UpdateStatus("请选择一个文件进行上传");
+        UpdateStatus("Please select a file to upload");
         printf("OnFileSelected: Invalid path: %s\n", fullPath->ToStdString().c_str());
     }
 }
 
 void FileExplorerFrame::OnFileDoubleClick(wxListEvent& event) {
     long index = event.GetIndex();
-    wxString* fullPath = reinterpret_cast<wxString*>(m_fileList->GetItemData(index));
-    
-    if (!fullPath) {
+    wxString fullPath = *reinterpret_cast<wxString*>(m_fileList->GetItemData(index));
+
+    if (fullPath.IsEmpty()) {
         printf("OnFileDoubleClick: fullPath is null\n");
         return;
     }
-    
-    printf("OnFileDoubleClick: path = %s\n", fullPath->ToStdString().c_str());
-    printf("OnFileDoubleClick: DirExists = %d\n", wxFileName::DirExists(*fullPath));
-    printf("OnFileDoubleClick: FileExists = %d\n", wxFileName::FileExists(*fullPath));
-    
-    if (wxFileName::DirExists(*fullPath)) {
-        printf("OnFileDoubleClick: Entering directory: %s\n", fullPath->ToStdString().c_str());
-        
+
+    //printf("OnFileDoubleClick: path = %s\n", fullPath.ToStdString().c_str());
+    //printf("OnFileDoubleClick: DirExists = %d\n", wxFileName::DirExists(fullPath));
+    //printf("OnFileDoubleClick: FileExists = %d\n", wxFileName::FileExists(fullPath));
+
+    if (wxFileName::DirExists(fullPath)) {
+        //printf("OnFileDoubleClick: Entering directory: %s\n", fullPath.ToStdString().c_str());
+
         // 双击目录，进入该目录
-        PopulateFileList(*fullPath);
-        
+        PopulateFileList(fullPath);
+        //printf("OnFileDoubleClick: Populated file list for directory: %s\n", fullPath.ToStdString().c_str());
         // 同步更新目录树选择（可选）
-        SyncDirectoryTreeSelection(*fullPath);
-        
+        SyncDirectoryTreeSelection(fullPath);
+
         // 更新状态
-        UpdateStatus("进入目录: " + *fullPath);
-    } else if (wxFileName::FileExists(*fullPath)) {
-        printf("OnFileDoubleClick: Selecting file: %s\n", fullPath->ToStdString().c_str());
-        
+        UpdateStatus("Entering directory: " + fullPath);
+    } else if (wxFileName::FileExists(fullPath)) {
+        //printf("OnFileDoubleClick: Selecting file: %s\n", fullPath.ToStdString().c_str());
+
         // 双击文件，选中该文件（用于上传）
-        m_selectedFile = *fullPath;
+        m_selectedFile = fullPath;
         m_uploadBtn->Enable(true);
-        UpdateStatus("已选择文件: " + wxFileName(*fullPath).GetFullName());
+        UpdateStatus("Selected file: " + wxFileName(fullPath).GetFullName());
     } else {
-        printf("OnFileDoubleClick: Path does not exist: %s\n", fullPath->ToStdString().c_str());
+        printf("OnFileDoubleClick: Path does not exist: %s\n", fullPath.ToStdString().c_str());
     }
 }
 
 void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
     if (m_selectedFile.IsEmpty()) {
-        wxMessageBox("请先选择要上传的文件", "提示", wxOK | wxICON_INFORMATION);
-                return;
-            }
-    
-    // 创建上传进度对话框
-    m_progressDialog = new UploadProgressDialog(this, m_selectedFile);
-    
-    // 先启动上传线程
-    if (!m_progressDialog->StartUpload()) {
-        wxMessageBox("无法启动上传任务", "错误", wxOK | wxICON_ERROR);
-        m_progressDialog->Destroy();
+        wxMessageBox("Please select a file to upload", "Tip", wxOK | wxICON_INFORMATION);
         return;
     }
     
+    // 创建上传进度对话框
+
+    m_progressDialog = new UploadProgressDialog(this, m_selectedFile);
+    printf("progress dialog created\n");
+    // 先启动上传线程
+    if (!m_progressDialog->StartUpload()) {
+        wxMessageBox("Unable to start upload task", "Error", wxOK | wxICON_ERROR);
+        m_progressDialog->Destroy();
+        m_progressDialog = nullptr;
+        return;
+    }
+    printf("progress dialog started\n");
     // 显示进度对话框并等待结果
     int result = m_progressDialog->ShowModal();
-    
+    printf("progress dialog modal shown\n");
     // 安全地销毁进度对话框
     if (m_progressDialog) {
+        printf("progress dialog cleanup thread\n");
         m_progressDialog->Destroy();
         m_progressDialog = nullptr;
 }
     
     // 根据结果显示消息并处理后续操作
     if (result == wxID_OK) {
-        wxMessageBox("文件上传成功！", "完成", wxOK | wxICON_INFORMATION);
+        wxMessageBox("Upload Success!", "Complete", wxOK | wxICON_INFORMATION);
         // 直接返回主界面，不使用 CallAfter
         //ReturnToMainFrame();
         printf("complete\n");
     } else {
-        wxMessageBox("文件上传失败！", "错误", wxOK | wxICON_ERROR);
+        wxMessageBox("Upload Failed!", "Error", wxOK | wxICON_ERROR);
     }
     printf("finish upload\n");
 }
 
 void FileExplorerFrame::OnBack(wxCommandEvent& event) {
     ReturnToMainFrame();
-    }
-    
+}
+
 void FileExplorerFrame::ReturnToMainFrame() {
-    // 显示主窗口
-    if (GetParent()) {
-        GetParent()->Show(true);
-        GetParent()->Raise(); // 确保窗口置于前台
-}   
-    printf("ReturnToMainFrame\n");
-    // 直接关闭当前窗口，不使用 CallAfter
     Close(true);
 }
 
 void FileExplorerFrame::OnClose(wxCloseEvent& event) {
     // 显示主窗口
-    printf("OnClose\n");
+    printf("back to main frame\n");
     auto parent = GetParent();
     if (parent) {
         parent->Show(true);
-
-        printf("Show true\n");
-
         dynamic_cast<MainFrame*>(parent)->OnFileExplorerFrameClose();
-        printf("OnFileExplorerFrameClose\n");
     }
     // 允许窗口关闭
     event.Skip();
-    printf("Skip\n");
 }
 
 void FileExplorerFrame::UpdateStatus(const wxString& message) {
@@ -516,24 +513,16 @@ void FileExplorerFrame::FindAndSelectTreeItem(wxTreeItemId parentId, const wxStr
     // 递归检查子节点
     wxTreeItemIdValue cookie;
     wxTreeItemId childId = m_dirTree->GetFirstChild(parentId, cookie);
-    
+    //printf("targetPath: %s\n", targetPath.ToStdString().c_str());
     while (childId.IsOk()) {
         // 检查子节点的路径是否是目标路径的前缀
+        //m_dirTree->Expand(childId);
         TreeItemData* childData = dynamic_cast<TreeItemData*>(m_dirTree->GetItemData(childId));
         if (childData) {
             wxString childPath = childData->GetPath();
             if (targetPath.StartsWith(childPath)) {
                 // 如果需要展开子节点
-                if (m_dirTree->GetChildrenCount(childId) == 1) {
-                    wxTreeItemIdValue subCookie;
-                    wxTreeItemId subChild = m_dirTree->GetFirstChild(childId, subCookie);
-                    if (subChild.IsOk() && m_dirTree->GetItemText(subChild) == "...") {
-                        // 删除虚拟子项并添加真实子项
-                        m_dirTree->Delete(subChild);
-                        AddDirectoryChildren(childId, childPath);
-                    }
-                }
-                
+                m_dirTree->Expand(childId);
                 // 递归查找
                 FindAndSelectTreeItem(childId, targetPath);
                 return;
