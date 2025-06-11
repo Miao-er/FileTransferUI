@@ -184,7 +184,7 @@ wxThread::ExitCode UploadThread::Entry() {
     int percent = 0;
     for (percent = 1; percent <= 100; ++percent) {
         if (TestDestroy() || m_dialog->m_cancelled) break;
-        printf("Uploading... %d%%\n", percent);
+        // printf("Uploading... %d%%\n", percent);
         wxMilliSleep(20);
         wxCommandEvent evt(wxEVT_UPLOAD_PROGRESS);
         evt.SetInt(percent);

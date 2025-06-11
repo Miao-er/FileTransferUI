@@ -13,7 +13,7 @@ wxBEGIN_EVENT_TABLE(DirectoryConfigDialog, wxDialog)
 wxEND_EVENT_TABLE()
 
 DirectoryConfigDialog::DirectoryConfigDialog(wxWindow* parent)
-    : wxDialog(parent, wxID_ANY, "修改本地存储位置",
+    : wxDialog(parent, wxID_ANY, _T("修改本地存储位置"),
                wxDefaultPosition, wxSize(500, 500),
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER) {
     InitializeUI();
@@ -22,51 +22,48 @@ DirectoryConfigDialog::DirectoryConfigDialog(wxWindow* parent)
 
 void DirectoryConfigDialog::InitializeUI() {
     wxPanel* panel = new wxPanel(this);
-    
+
+    // 新增：显示之前已保存的路径
+    m_savedPathLabel = new wxStaticText(panel, wxID_ANY, _T("当前接收文件存储位置："));
+
     // 提示文本
-    wxStaticText* promptText = new wxStaticText(panel, wxID_ANY, 
-        "请选择本地接收文件的存储位置：");
-    
+    wxStaticText* promptText = new wxStaticText(panel, wxID_ANY, _T("请选择新的本地存储位置"));
+    promptText->SetFont(promptText->GetFont().Bold());
+
     // 当前选择路径显示
-    m_pathLabel = new wxStaticText(panel, wxID_ANY, "");
-    m_pathLabel->SetFont(m_pathLabel->GetFont().Bold());
-    
+    // m_pathLabel->SetFont(m_pathLabel->GetFont().Bold());
+
     // 目录树
     m_dirTree = new wxTreeCtrl(panel, wxID_ANY,
                                wxDefaultPosition, wxDefaultSize,
                                wxTR_DEFAULT_STYLE | wxTR_SINGLE);
-    
+
     // 按钮
-    m_confirmBtn = new wxButton(panel, wxID_OK, "确认");
-    m_cancelBtn = new wxButton(panel, wxID_CANCEL, "取消");
-    
+    m_confirmBtn = new wxButton(panel, wxID_OK, _T("确认"));
+    m_cancelBtn = new wxButton(panel, wxID_CANCEL, _T("取消"));
+
     // 按钮布局
     wxBoxSizer* btnSizer = new wxBoxSizer(wxHORIZONTAL);
     btnSizer->AddStretchSpacer();
     btnSizer->Add(m_confirmBtn, 0, wxRIGHT, 10);
     btnSizer->Add(m_cancelBtn, 0);
-    
+
     // 主布局
     wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
-    mainSizer->Add(promptText, 0, wxALL, 15);
-    mainSizer->Add(m_pathLabel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 15);
+    mainSizer->Add(promptText, 0,wxALL | wxALIGN_CENTER_HORIZONTAL, 15);
+    mainSizer->Add(m_savedPathLabel, 0, wxEXPAND | wxLEFT | wxRIGHT, 15); // 新增
     mainSizer->Add(m_dirTree, 1, wxEXPAND | wxLEFT | wxRIGHT, 15);
     mainSizer->Add(btnSizer, 0, wxEXPAND | wxALL, 15);
-    
+
     panel->SetSizer(mainSizer);
-    
+
     // 设置整体布局
     wxBoxSizer* dlgSizer = new wxBoxSizer(wxVERTICAL);
     dlgSizer->Add(panel, 1, wxEXPAND);
     SetSizer(dlgSizer);
-    
-    // 设置窗口大小
+
     SetMinSize(wxSize(400, 400));
-    
-    // 初始化目录树
     PopulateDirectoryTree();
-    
-    // 设置默认按钮
     m_confirmBtn->SetDefault();
 }
 void DirectoryConfigDialog::LoadCurrentPath() {
@@ -76,27 +73,43 @@ void DirectoryConfigDialog::LoadCurrentPath() {
     wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
     
     wxString currentPath;
-    
+
     if (wxFileName::FileExists(configPath)) {
         wxTextFile file(configPath);
         if (file.Open()) {
             for (size_t i = 0; i < file.GetLineCount(); ++i) {
                 wxString line = file.GetLine(i).Trim();
                 if (line.StartsWith("storage_path=")) {
-                    currentPath = line.Mid(13); // 跳过 "storage_path="
+                    m_savedPath = line.Mid(13); // 新增
+                    currentPath = m_savedPath;
                     break;
                 }
             }
             file.Close();
         }
     }
-    
+
     // 如果没有找到配置或路径无效，使用默认路径
     if (currentPath.IsEmpty() || !wxFileName::DirExists(currentPath)) {
         currentPath = wxStandardPaths::Get().GetDocumentsDir();
+        wxTextFile file;
+        wxArrayString lines;
+        lines.Add("storage_path=" + currentPath);
+        if (file.Create(configPath) || file.Open(configPath)) {
+            file.Clear();
+            for (const wxString& line : lines) {
+                file.AddLine(line);
+            }
+            file.Write();
+            file.Close();
+        }
     }
-    
+
     m_selectedPath = currentPath;
+    // 新增：显示之前保存的路径（即使无效也显示）
+    if (m_savedPathLabel) {
+        m_savedPathLabel->SetLabel("当前接收文件存储位置：" + m_savedPath);
+    }
     UpdatePathDisplay();
 }
 
@@ -151,24 +164,11 @@ void DirectoryConfigDialog::PopulateDirectoryTree() {
     m_dirTree->DeleteAllItems();
     
     // 添加根节点
-    wxTreeItemId rootId = m_dirTree->AddRoot("计算机");
     
-#ifdef __WXMSW__
-    // Windows：添加所有驱动器
-    for (char drive = 'A'; drive <= 'Z'; ++drive) {
-        wxString drivePath = wxString::Format("%c:", drive);
-        if (wxFileName::DirExists(drivePath)) {
-            wxTreeItemId driveId = m_dirTree->AppendItem(rootId, drivePath);
-            m_dirTree->SetItemData(driveId, new DirTreeItemData(drivePath + "\\"));
-            m_dirTree->SetItemHasChildren(driveId, true);
-        }
-    }
-#else
     // Unix系统：从根目录开始
-    wxTreeItemId rootDirId = m_dirTree->AppendItem(rootId, "/");
-    m_dirTree->SetItemData(rootDirId, new DirTreeItemData("/"));
-    m_dirTree->SetItemHasChildren(rootDirId, true);
-#endif
+    wxTreeItemId rootId = m_dirTree->AddRoot("/");
+    m_dirTree->SetItemData(rootId, new DirTreeItemData("/"));
+    m_dirTree->SetItemHasChildren(rootId, true);
     
     m_dirTree->Expand(rootId);
 }
@@ -215,7 +215,7 @@ void DirectoryConfigDialog::AddDirectoryChildren(wxTreeItemId parent, const wxSt
 }
 
 void DirectoryConfigDialog::UpdatePathDisplay() {
-    m_pathLabel->SetLabel("Selected Directory: " + m_selectedPath);
+    m_savedPathLabel->SetLabel(_T("当前接收文件存储位置：") + m_savedPath);
 }
 void DirectoryConfigDialog::OnDirSelected(wxTreeEvent& event) {
     wxTreeItemId itemId = event.GetItem();
@@ -241,7 +241,7 @@ void DirectoryConfigDialog::OnDirExpanding(wxTreeEvent& event) {
 void DirectoryConfigDialog::OnConfirm(wxCommandEvent& event) {
     // 验证路径是否存在
     if (m_selectedPath.IsEmpty() || !wxFileName::DirExists(m_selectedPath)) {
-        wxMessageBox("请选择一个有效的目录", "路径错误", 
+        wxMessageBox(_T("请选择一个有效的目录"), _T("路径错误"), 
                      wxOK | wxICON_WARNING, this);
         return;
     }

@@ -59,7 +59,7 @@ void MainFrame::InitializeUI() {
     m_editBtn = new wxButton(panel, ID_EDIT_SERVER, "Edit");
     m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "Delete(-)");
     m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "Connect");
-    m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, "修改本地存储位置"); // 添加新按钮
+    m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, _T("Change Local Saved Folder")); // 添加新按钮
     
     // 初始状态下禁用某些按钮
     m_editBtn->Enable(false);
@@ -210,10 +210,10 @@ void MainFrame::OnStorageLocation(wxCommandEvent& event) {
     DirectoryConfigDialog dialog(this);
     if (dialog.ShowModal() == wxID_OK) {
         wxString selectedPath = dialog.GetSelectedPath();
-        SetStatusText(wxString::Format("本地存储位置已更新: %s", selectedPath));
+        SetStatusText(wxString::Format(_T("本地存储位置已更新: %s"), selectedPath));
         
         // 可选：显示成功消息
-        wxMessageBox(wxString::Format("本地存储位置已成功设置为:\n%s", selectedPath),
-                     "设置成功", wxOK | wxICON_INFORMATION, this);
+        wxMessageBox(wxString::Format(_T("本地存储位置已成功设置为:\n%s"), selectedPath),
+                     _T("设置成功"), wxOK | wxICON_INFORMATION, this);
     }
 }

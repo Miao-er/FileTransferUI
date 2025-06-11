@@ -31,11 +31,13 @@ private:
     // UI 组件
     wxTreeCtrl* m_dirTree;
     wxStaticText* m_pathLabel;
+    wxStaticText* m_savedPathLabel; // 新增
     wxButton* m_confirmBtn;
     wxButton* m_cancelBtn;
     
     // 数据成员
     wxString m_selectedPath;
+    wxString m_savedPath; // 当前路径，用于加载和保存
     // 私有方法
     void InitializeUI();
     void LoadCurrentPath();
