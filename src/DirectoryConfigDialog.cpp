@@ -25,10 +25,14 @@ void DirectoryConfigDialog::InitializeUI() {
 
     // 新增：显示之前已保存的路径
     m_savedPathLabel = new wxStaticText(panel, wxID_ANY, _T("当前接收文件存储位置："));
+    m_savedPathLabel->SetFont(m_savedPathLabel->GetFont().Bold());
 
     // 提示文本
-    wxStaticText* promptText = new wxStaticText(panel, wxID_ANY, _T("请选择新的本地存储位置"));
-    promptText->SetFont(promptText->GetFont().Bold());
+    // wxStaticText* promptText = new wxStaticText(panel, wxID_ANY, _T("请选择新的本地存储位置"));
+    // wxFont promptFont = promptText->GetFont();
+    // promptFont.SetPointSize(promptFont.GetPointSize() + 2);
+    // promptFont.SetWeight(wxFONTWEIGHT_BOLD);
+    // promptText->SetFont(promptFont);
 
     // 当前选择路径显示
     // m_pathLabel->SetFont(m_pathLabel->GetFont().Bold());
@@ -50,7 +54,7 @@ void DirectoryConfigDialog::InitializeUI() {
 
     // 主布局
     wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
-    mainSizer->Add(promptText, 0,wxALL | wxALIGN_CENTER_HORIZONTAL, 15);
+    //mainSizer->Add(promptText, 0,wxALL | wxALIGN_CENTER_HORIZONTAL, 15);
     mainSizer->Add(m_savedPathLabel, 0, wxEXPAND | wxLEFT | wxRIGHT, 15); // 新增
     mainSizer->Add(m_dirTree, 1, wxEXPAND | wxLEFT | wxRIGHT, 15);
     mainSizer->Add(btnSizer, 0, wxEXPAND | wxALL, 15);
@@ -111,6 +115,7 @@ void DirectoryConfigDialog::LoadCurrentPath() {
         m_savedPathLabel->SetLabel("当前接收文件存储位置：" + m_savedPath);
     }
     UpdatePathDisplay();
+    ExpandAndSelectPath(m_selectedPath);
 }
 
 void DirectoryConfigDialog::SavePathToConfig(const wxString& path) {
@@ -255,3 +260,42 @@ void DirectoryConfigDialog::OnConfirm(wxCommandEvent& event) {
 void DirectoryConfigDialog::OnCancel(wxCommandEvent& event) {
     EndModal(wxID_CANCEL);
 }
+
+void DirectoryConfigDialog::ExpandAndSelectPath(const wxString& path) {
+    wxTreeItemId rootId = m_dirTree->GetRootItem();
+    if (!rootId.IsOk()) return;
+    wxTreeItemId currentId = rootId;
+    while(currentId.IsOk() && !path.IsEmpty()) {
+        // 展开当前节点
+        m_dirTree->Expand(currentId);
+        DirTreeItemData* data = dynamic_cast<DirTreeItemData*>(m_dirTree->GetItemData(currentId));
+        if(data && data->GetPath() == path) {
+            // 如果当前节点就是目标路径，直接选中
+            break;
+        }
+        // 查找下一级
+        wxTreeItemIdValue cookie;
+        wxTreeItemId childId = m_dirTree->GetFirstChild(currentId, cookie);
+        bool found = false;
+        while (childId.IsOk()) {
+            DirTreeItemData* childData = dynamic_cast<DirTreeItemData*>(m_dirTree->GetItemData(childId));
+            if (childData) {
+                wxString childPath = childData->GetPath();
+                if(path.StartsWith(childPath)) {
+                    // 如果目标路径是当前子节点的前缀
+                    currentId = childId;
+                    found = true;
+                    break;
+                }
+            }
+            childId = m_dirTree->GetNextChild(currentId, cookie);
+        }
+        if (!found) break; // 没找到就停止
+        // 动态加载下一级
+        AddDirectoryChildren(currentId, ((DirTreeItemData*)m_dirTree->GetItemData(currentId))->GetPath());
+    }
+    // 选中目标节点
+    m_dirTree->SelectItem(currentId);
+    m_dirTree->EnsureVisible(currentId);
+}
+// 自动展开并选中已保存路径

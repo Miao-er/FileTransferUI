@@ -45,6 +45,7 @@ private:
     void PopulateDirectoryTree();
     void AddDirectoryChildren(wxTreeItemId parent, const wxString& path);
     void UpdatePathDisplay();
+    void ExpandAndSelectPath(const wxString& path); // 新增
     // 事件处理
     void OnDirSelected(wxTreeEvent& event);
     void OnDirExpanding(wxTreeEvent& event);
