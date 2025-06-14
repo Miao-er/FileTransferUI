@@ -3,6 +3,10 @@
 #include "FileExplorerFrame.h"
 #include "DirectoryConfigDialog.h" // 添加包含
 #include <wx/msgdlg.h>
+#include <wx/stdpaths.h>
+#include <wx/filename.h>
+#include <wx/textfile.h>
+#include <wx/utils.h> // for wxLaunchDefaultBrowser
 
 wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_BUTTON(ID_ADD_SERVER, MainFrame::OnAdd)
@@ -10,7 +14,9 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_BUTTON(ID_DELETE_SERVER, MainFrame::OnDelete)
     EVT_BUTTON(ID_CONNECT_SERVER, MainFrame::OnConnect)
     EVT_BUTTON(ID_STORAGE_LOCATION, MainFrame::OnStorageLocation) // 添加事件绑定
+    EVT_BUTTON(ID_SHOW_IN_BROWSER, MainFrame::OnShowInBrowser) // 新增事件绑定
     EVT_LIST_ITEM_SELECTED(ID_SERVER_LIST, MainFrame::OnServerSelected)
+    EVT_LIST_ITEM_DESELECTED(ID_SERVER_LIST, MainFrame::OnServerDeselected) // 新增
     EVT_LIST_ITEM_ACTIVATED(ID_SERVER_LIST, MainFrame::OnServerDoubleClick)
     EVT_CLOSE(MainFrame::OnClose)
 wxEND_EVENT_TABLE()
@@ -60,6 +66,7 @@ void MainFrame::InitializeUI() {
     m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "Delete(-)");
     m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "Connect");
     m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, _T("Change Local Saved Folder")); // 添加新按钮
+    m_showInBrowserBtn = new wxButton(panel, ID_SHOW_IN_BROWSER, _T("Show in Browser")); // 新增按钮
     
     // 初始状态下禁用某些按钮
     m_editBtn->Enable(false);
@@ -75,6 +82,7 @@ void MainFrame::InitializeUI() {
     btnSizer->Add(m_deleteBtn, 0, wxRIGHT, 5);
     btnSizer->AddStretchSpacer();
     btnSizer->Add(m_storageBtn, 0, wxRIGHT, 10); // 添加存储位置按钮
+    btnSizer->Add(m_showInBrowserBtn, 0, wxRIGHT, 10); // 新增到布局
     btnSizer->Add(m_connectBtn, 0);
     
     mainSizer->Add(new wxStaticText(panel, wxID_ANY, _T("列表:")), 
@@ -178,6 +186,10 @@ void MainFrame::OnServerSelected(wxListEvent& event) {
     UpdateButtonStates();
 }
 
+void MainFrame::OnServerDeselected(wxListEvent& event) {
+    UpdateButtonStates();
+}
+
 void MainFrame::OnServerDoubleClick(wxListEvent& event) {
     // 创建一个命令事件对象并调用连接处理函数
     wxCommandEvent evt(wxEVT_BUTTON, ID_CONNECT_SERVER);
@@ -216,4 +228,44 @@ void MainFrame::OnStorageLocation(wxCommandEvent& event) {
         wxMessageBox(wxString::Format(_T("本地存储位置已成功设置为:\n%s"), selectedPath),
                      _T("设置成功"), wxOK | wxICON_INFORMATION, this);
     }
+}
+
+void MainFrame::OnShowInBrowser(wxCommandEvent& event) {
+    // 读取配置文件中的存储路径
+    wxStandardPaths& paths = wxStandardPaths::Get();
+    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
+    wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
+    wxString storagePath;
+
+    if (wxFileName::FileExists(configPath)) {
+        wxTextFile file(configPath);
+        if (file.Open()) {
+            for (size_t i = 0; i < file.GetLineCount(); ++i) {
+                wxString line = file.GetLine(i).Trim();
+                if (line.StartsWith("storage_path=")) {
+                    storagePath = line.Mid(13);
+                    break;
+                }
+            }
+            file.Close();
+        }
+    }
+    if (storagePath.IsEmpty() || !wxFileName::DirExists(storagePath)) {
+        wxMessageBox(_T("未找到有效的本地存储路径，请先设置。"), _T("提示"), wxOK | wxICON_WARNING, this);
+        return;
+    }
+
+    // 打开系统文件管理器
+#ifdef __WXGTK__
+    wxString cmd = "xdg-open \"" + storagePath + "\"";
+    wxExecute(cmd, wxEXEC_ASYNC);
+#elif defined(__WXMSW__)
+    wxString cmd = "explorer \"" + storagePath + "\"";
+    wxExecute(cmd, wxEXEC_ASYNC);
+#elif defined(__WXOSX__)
+    wxString cmd = "open \"" + storagePath + "\"";
+    wxExecute(cmd, wxEXEC_ASYNC);
+#else
+    wxMessageBox(_T("不支持的操作系统"), _T("错误"), wxOK | wxICON_ERROR, this);
+#endif
 }
