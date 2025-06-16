@@ -5,6 +5,7 @@
 #include <wx/gauge.h>
 #include <wx/thread.h>
 #include <wx/file.h>
+#include <chrono>
 
 // 前向声明
 class UploadThread;
@@ -12,6 +13,17 @@ class UploadThread;
 // 自定义事件声明
 wxDECLARE_EVENT(wxEVT_UPLOAD_PROGRESS, wxCommandEvent);
 wxDECLARE_EVENT(wxEVT_UPLOAD_COMPLETE, wxCommandEvent);
+
+// 进度信息结构体
+struct ProgressInfo {
+    int percentage;
+    wxULongLong bytesTransferred;
+    wxULongLong totalBytes;
+    double transferRate; // KB/s
+    wxString status;
+    
+    ProgressInfo() : percentage(0), bytesTransferred(0), totalBytes(0), transferRate(0.0) {}
+};
 
 /**
  * @brief 上传进度对话框
@@ -32,16 +44,22 @@ private:
     wxGauge* m_progressGauge;
     wxStaticText* m_progressText;
     wxStaticText* m_statusText;
+    wxStaticText* m_speedText;        // 新增：传输速率显示
+    wxStaticText* m_bytesText;        // 新增：字节数显示
+    wxStaticText* m_timeText;         // 新增：时间显示
     
     // 数据成员
     wxString m_filepath;
     bool m_cancelled;
     UploadThread* m_uploadThread;
+    wxULongLong m_totalFileSize;      // 新增：总文件大小
     
-    // 私有方法 - 将 FormatFileSize 放在前面
+    // 私有方法
     wxString FormatFileSize(wxULongLong size);
+    wxString FormatTransferRate(double rate);
+    wxString FormatTime(int seconds);
     void InitializeUI();
-    void UpdateProgress(int percentage, const wxString& status);
+    void UpdateProgress(const ProgressInfo& info);
     
     // 事件处理方法
     void OnCancel(wxCommandEvent& event);
@@ -67,7 +85,11 @@ protected:
 private:
     UploadProgressDialog* m_dialog;
     wxString m_filepath;
+    wxULongLong m_totalSize;
+    std::chrono::steady_clock::time_point m_startTime;
+    
     wxString FormatFileSize(wxULongLong size);
+    void SendProgressUpdate(const ProgressInfo& info);
 };
 
 #endif
