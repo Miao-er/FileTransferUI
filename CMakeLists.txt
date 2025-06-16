@@ -9,26 +9,10 @@ find_package(wxWidgets REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
 # 源文件
-set(SOURCES
-    src/main.cpp
-    src/MainFrame.cpp
-    src/ServerConfig.cpp
-    src/ServerConfigDialog.cpp
-    src/FileExplorerFrame.cpp
-    src/UploadProgressDialog.cpp
-    src/DirectoryConfigDialog.cpp
-)
+file(GLOB_RECURSE SOURCES "interface/*.cpp" "net/*.cpp")
 
 # 头文件
-set(HEADERS
-    src/MainFrame.h
-    src/ServerConfig.h
-    src/ServerConfigDialog.h
-    src/FileExplorerFrame.h
-    src/UploadProgressDialog.h
-    src/DirectoryConfigDialog.h
-)
-
+file(GLOB_RECURSE HEADERS "interface/*.h" "net/*.h")
 # 创建可执行文件
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 

@@ -15,6 +15,7 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_BUTTON(ID_CONNECT_SERVER, MainFrame::OnConnect)
     EVT_BUTTON(ID_STORAGE_LOCATION, MainFrame::OnStorageLocation) // 添加事件绑定
     EVT_BUTTON(ID_SHOW_IN_BROWSER, MainFrame::OnShowInBrowser) // 新增事件绑定
+    EVT_BUTTON(ID_EXIT, MainFrame::OnExit) // 新增退出事件绑定
     EVT_LIST_ITEM_SELECTED(ID_SERVER_LIST, MainFrame::OnServerSelected)
     EVT_LIST_ITEM_DESELECTED(ID_SERVER_LIST, MainFrame::OnServerDeselected) // 新增
     EVT_LIST_ITEM_ACTIVATED(ID_SERVER_LIST, MainFrame::OnServerDoubleClick)
@@ -65,8 +66,9 @@ void MainFrame::InitializeUI() {
     m_editBtn = new wxButton(panel, ID_EDIT_SERVER, "Edit");
     m_deleteBtn = new wxButton(panel, ID_DELETE_SERVER, "Delete(-)");
     m_connectBtn = new wxButton(panel, ID_CONNECT_SERVER, "Connect");
-    m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, _T("Change Local Saved Folder")); // 添加新按钮
-    m_showInBrowserBtn = new wxButton(panel, ID_SHOW_IN_BROWSER, _T("Show in Browser")); // 新增按钮
+    m_storageBtn = new wxButton(panel, ID_STORAGE_LOCATION, _T("Edit Saved Folder")); // 添加新按钮
+    m_showInBrowserBtn = new wxButton(panel, ID_SHOW_IN_BROWSER, _T("Show in Brower")); // 新增按钮
+    m_exitBtn = new wxButton(panel, ID_EXIT, "Exit"); // 新增退出按钮
     
     // 初始状态下禁用某些按钮
     m_editBtn->Enable(false);
@@ -83,7 +85,8 @@ void MainFrame::InitializeUI() {
     btnSizer->AddStretchSpacer();
     btnSizer->Add(m_storageBtn, 0, wxRIGHT, 10); // 添加存储位置按钮
     btnSizer->Add(m_showInBrowserBtn, 0, wxRIGHT, 10); // 新增到布局
-    btnSizer->Add(m_connectBtn, 0);
+    btnSizer->Add(m_connectBtn, 0, wxRIGHT, 10); // 添加右边距
+    btnSizer->Add(m_exitBtn, 0); // 新增退出按钮到布局
     
     mainSizer->Add(new wxStaticText(panel, wxID_ANY, _T("列表:")), 
                    0, wxALL, 10);
@@ -268,4 +271,8 @@ void MainFrame::OnShowInBrowser(wxCommandEvent& event) {
 #else
     wxMessageBox(_T("不支持的操作系统"), _T("错误"), wxOK | wxICON_ERROR, this);
 #endif
+}
+
+void MainFrame::OnExit(wxCommandEvent& event) {
+    Close(true);
 }

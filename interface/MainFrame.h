@@ -27,6 +27,7 @@ private:
     wxButton* m_connectBtn;
     wxButton* m_storageBtn; // 添加存储位置按钮
     wxButton* m_showInBrowserBtn; // 新增按钮声明
+    wxButton* m_exitBtn; // 新增退出按钮
     
     // 数据
     ServerConfig* m_config;
@@ -41,6 +42,7 @@ private:
     void OnServerDoubleClick(wxListEvent& event);
     void OnStorageLocation(wxCommandEvent& event); // 添加存储位置处理方法
     void OnShowInBrowser(wxCommandEvent& event); // 新增事件声明
+    void OnExit(wxCommandEvent& event); // 新增退出事件处理方法
     void OnClose(wxCloseEvent& event);
     void OnServerDeselected(wxListEvent& event); // 新增
     
@@ -61,7 +63,8 @@ enum {
     ID_CONNECT_SERVER,
     ID_SERVER_LIST,
     ID_STORAGE_LOCATION, // 添加存储位置事件ID
-    ID_SHOW_IN_BROWSER // 新增事件ID
+    ID_SHOW_IN_BROWSER, // 新增事件ID
+    ID_EXIT // 新增退出事件ID
 };
 
 #endif
