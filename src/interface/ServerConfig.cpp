@@ -8,13 +8,12 @@ ServerConfig::ServerConfig() {
     // 获取配置文件路径
     wxStandardPaths& paths = wxStandardPaths::Get();
     wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
-    
     // 确保配置目录存在
     if (!wxFileName::DirExists(configDir)) {
         wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
     }
-    
-    m_configPath = configDir + wxFileName::GetPathSeparator() + "servers.conf";
+
+    m_configPath = configDir + wxFileName::GetPathSeparator() + "servers.save";
     printf("config path: %s\n", std::string(m_configPath).c_str());
 }
 

@@ -9,10 +9,10 @@ find_package(wxWidgets REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
 # 源文件
-file(GLOB_RECURSE SOURCES "interface/*.cpp") # "net/*.cpp")
+file(GLOB_RECURSE SOURCES "src/interface/*.cpp") # "net/*.cpp")
 
 # 头文件
-file(GLOB_RECURSE HEADERS "interface/*.h" "net/*.h")
+file(GLOB_RECURSE HEADERS "src/interface/*.h") # "net/*.h")
 # 创建可执行文件
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
