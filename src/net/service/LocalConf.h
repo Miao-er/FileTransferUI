@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include <stdint.h>
+#include <wx/wx.h>
+#include <wx/stdpaths.h>
+#include <wx/filename.h>
+#include <wx/string.h>
 
 class LocalConf {
 public:
@@ -16,8 +20,10 @@ public:
         rdmaGidIndex(0),
         defaultRate(100.0),
         blockSize(1024), //in kbytes
-        blockNum(256)
-    {}
+        blockNum(256),
+    {
+        this->savedFolderPath = wxStandardPaths::Get().GetDocumentsDir();
+    }
     ~LocalConf(){
         saveConf();
     }
@@ -28,6 +34,8 @@ public:
     double getDefaultRate() const { return defaultRate; }
     int getBlockSize() const { return blockSize; }
     int getBlockNum() const { return blockNum; }
+    wxString getSavedFolderPath() const { return savedFolderPath; }
+    void setSavedFolderPath(const wxString& path) { savedFolderPath = path; }
 
 private:
     std::string configPath;
@@ -43,6 +51,9 @@ private:
     //for memory
     int blockSize;
     int blockNum;
+
+    //for file save
+    wxString savedFolderPath;
 
     bool isCommentOrEmpty(const std::string& line) const;
     std::string& trim(std::string& str);

@@ -50,16 +50,12 @@ public:
 
 void recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* client_list)
 {
-    StreamControl stream_control(hwrdma, peer_fd, local_conf,  client_list);
+    StreamControl stream_control(hwrdma, peer_fd, local_conf->getDefaultRate(),  client_list);
     std::shared_ptr<int> x(NULL, [&](int *)
                            {    
                                 close(peer_fd); 
                                 client_list->removeClient(peer_fd);
                             });
-    IPInfo ip_info = {"192.168.7.10",
-                      "192.168.6.20",
-                      "192.168.2.2"};
-    
     if(stream_control.swapBufferConfig() == -1)
         return;
     if (stream_control.bindMemoryRegion() == -1)
@@ -73,9 +69,9 @@ void recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* c
     if (stream_control.postRecvFile() == -1)
         return;
 }
-void sendData(HwRdma *hwrdma, int peer_fd)
+void sendData(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf)
 {
-    StreamControl stream_control(hwrdma, peer_fd, local_conf, nullptr);
+    StreamControl stream_control(hwrdma, peer_fd, local_conf->getDefaultRate(), nullptr);
     std::shared_ptr<int> x(NULL, [&](int *)
                            {    
                                 close(peer_fd); 

@@ -28,9 +28,10 @@ struct IPInfo
 struct QPInfo
 {
     uint16_t lid;
-    uint16_t lucp_id;
+    // uint16_t lucp_id;
     uint32_t qp_num;
-    uint32_t recv_depth;
+    uint32_t block_num;
+    uint32_t block_size;
     uint8_t gid[16];
 } __attribute__((packed));
 
@@ -47,7 +48,7 @@ private:
     uint8_t *buf_ptr = nullptr;
     struct ibv_mr *mr = nullptr;
     double default_rate;
-    uint64_t block_size;
+    uint32_t block_size;
     HwRdma *hwrdma;
     int peer_fd;
     std::vector<std::tuple<uint8_t *, uint32_t>> buffers;
@@ -56,17 +57,17 @@ private:
     struct ibv_cq *cq = nullptr;
     struct ibv_qp *qp = nullptr;
     QPInfo local_qp_info, remote_qp_info;
-    LocalConf *conf;
     ClientList *client_list;
+    LocalConf *local_conf;
 
 public:
 
-    StreamControl(HwRdma *hwrdma, int peer_fd, LocalConf *conf, ClientList *client_list)
+    StreamControl(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf, ClientList *client_list)
     {
         this->hwrdma = hwrdma;
         this->peer_fd = peer_fd;
-        this->conf = conf;
-        this->default_rate = conf->getDefaultRate();
+        this->default_rate = local_conf->getDefaultRate();
+        this->local_conf = local_conf;
         if(client_list)
             this->client_list = client_list;
     }
@@ -89,9 +90,9 @@ public:
             hwrdma->destroy_mr(mr);
     }
     int swapBufferConfig()
-    [
-
-    ]
+    {
+        
+    }
     int bindMemoryRegion(uint64_t length)
     {
         if(hwrdma->create_mr(&this->mr,&this->buf_ptr,length))
@@ -116,7 +117,7 @@ public:
         }
         return 0;
     }
-    int createLucpContext(IPInfo ip_info)
+    int createLucpContext()
     {
         // create cp_channel
         comp_channel = ibv_create_comp_channel(hwrdma->ctx);
@@ -139,8 +140,10 @@ public:
         qp_init_attr.qp_type = IBV_QPT_RC;
         
         local_qp_info.lid = hwrdma->port_attr.lid;
-        local_qp_info.lucp_id = duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count(); //TODO
-        local_qp_info.recv_depth = qp_init_attr.cap.max_recv_wr; //must before create qp,or max_recv_wr will change.
+        local_qp_info.block_num = buffers.size();
+        local_qp_info.block_size = this->block_size;
+        //local_qp_info.lucp_id = duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count(); //TODO
+        // local_qp_info.recv_depth = qp_init_attr.cap.max_recv_wr; //must before create qp,or max_recv_wr will change.
         memcpy(local_qp_info.gid, &hwrdma->gid, 16);
         // Create Queue Pair
         qp = ibv_create_qp(hwrdma->pd, &qp_init_attr);
@@ -278,9 +281,11 @@ public:
         }
         QPInfo net_local_qp_info, net_remote_qp_info;
         net_local_qp_info.lid = htons(local_qp_info.lid);
-        net_local_qp_info.lucp_id = htons(local_qp_info.lucp_id);
+        //net_local_qp_info.lucp_id = htons(local_qp_info.lucp_id);
         net_local_qp_info.qp_num = htonl(local_qp_info.qp_num);
-        net_local_qp_info.recv_depth = htonl(local_qp_info.recv_depth);
+        net_local_qp_info.block_num = htonl(local_qp_info.block_num);
+        net_local_qp_info.block_size = htonl(local_qp_info.block_size);
+        //net_local_qp_info.recv_depth = htonl(local_qp_info.recv_depth);
         memcpy(net_local_qp_info.gid, local_qp_info.gid, 16);
 
         if (sockSyncData(sizeof(QPInfo), (char *)&net_local_qp_info, (char *)&net_remote_qp_info) < 0)
@@ -289,19 +294,25 @@ public:
             return -1;
         }
         remote_qp_info.lid = ntohs(net_remote_qp_info.lid);
-        remote_qp_info.lucp_id = ntohs(net_remote_qp_info.lucp_id);
+        //remote_qp_info.lucp_id = ntohs(net_remote_qp_info.lucp_id);
         remote_qp_info.qp_num = ntohl(net_remote_qp_info.qp_num);
-        remote_qp_info.recv_depth = ntohl(net_remote_qp_info.recv_depth);
+        remote_qp_info.block_num = ntohl(net_remote_qp_info.block_num);
+        remote_qp_info.block_size = ntohl(net_remote_qp_info.block_size);
+        //remote_qp_info.recv_depth = ntohl(net_remote_qp_info.recv_depth);
         memcpy(remote_qp_info.gid, net_remote_qp_info.gid, 16);
 #ifdef DEBUG
         cout << "     local:" << endl
         << "       lid:" << local_qp_info.lid << endl
         << "    qp_num:" << local_qp_info.qp_num << endl
-        << "recv_depth:" << local_qp_info.recv_depth << endl
+        << " block_num:" << local_qp_info.block_num << endl
+        << "block_size:" << local_qp_info.block_size << endl
+        // << "recv_depth:" << local_qp_info.recv_depth << endl
         << "    remote:" << endl
         << "       lid:" << remote_qp_info.lid << endl
         << "    qp_num:" << remote_qp_info.qp_num << endl
-        << "recv_depth:" << remote_qp_info.recv_depth << endl;
+        << " block_num:" << remote_qp_info.block_num << endl
+        << "block_size:" << remote_qp_info.block_size << endl;
+        // << "recv_depth:" << remote_qp_info.recv_depth << endl;
 #endif
         return changeQPState();
     }
@@ -317,11 +328,14 @@ public:
         if (sockSyncData(sizeof(file_info), (char *)&file_info, (char *)&remote_file_info) != 0)
         {
             cout << "ERROR: synchronous failed before post file." << endl;
+            return -1;
         }
-        int recv_fd = open(remote_file_info.file_path, O_CREAT|O_WRONLY, 0777);
+        local_conf->loadConf();
+        string save_path = local_conf->getSavedFolderPath().ToStdString() + wxFileName::GetPathSeparator().ToStdString() + remote_file_info.file_path;
+        int recv_fd = open(save_path.c_str(), O_CREAT|O_WRONLY, 0777);
         if (recv_fd < 0)
         {
-            cout << "ERROR: Unable to open file \"" << remote_file_info.file_path << "\"!"  << "errno = " << errno << endl;
+            cout << "ERROR: Unable to create file \"" << save_path << "\"!"  << "errno = " << errno << endl;
             return -1;
         }
         std::shared_ptr<int> x(NULL, [&](int *){close(recv_fd);});
@@ -331,7 +345,7 @@ public:
         auto t_ = t;
         double delta_io = 0,delta = 0;
         int recv_num = 0;
-        char sync_char = 'A';
+        char sync_char = 'Y';
         sockSyncData(1, (char *)&sync_char, (char *)&sync_char);
         while(recv_bytes < remote_file_info.file_size)
         {
@@ -360,7 +374,7 @@ public:
                     recv_bytes += wc[i].byte_len;
                     //cout << "receive rate: " << wc[i].byte_len * 8 /(delta * 1e9) <<"Gbps" <<endl;
                     // auto io_start = high_resolution_clock::now();
-                    // write(recv_fd, (const char*)buff, wc[i].byte_len);
+                    write(recv_fd, (const char*)buff, wc[i].byte_len);
                     postRecvWr(wc[i].wr_id);
                     // auto io_end = high_resolution_clock::now();
                     // double delta_io_ = duration_cast<duration<double>>(io_end - io_start).count();
@@ -379,7 +393,7 @@ public:
         cout << "finish receive file:" << remote_file_info.file_path << "(" << (double)remote_file_info.file_size/1e9 << "GB)" << endl;
         return 0;
     }
-    int postSendFile(const char *file_path, const char *dst_file_path)
+    int postSendFile(const char *file_path, const char *file_name)
     {
         struct stat statbuf;
         auto ret = stat(file_path, &statbuf);
@@ -389,11 +403,12 @@ public:
             return -1;
         }
         FileInfo file_info, remote_file_info;
-        memcpy(file_info.file_path, dst_file_path, 256);
+        memcpy(file_info.file_path, file_name, 256);
         file_info.file_size = statbuf.st_size;
         if (sockSyncData(sizeof(file_info), (char *)&file_info, (char *)&remote_file_info) != 0)
         {
             cout << "ERROR: synchronous failed before post file." << endl;
+            return -1;
         }
         if (strcmp(remote_file_info.file_path, "READY_TO_RECEIVE") != 0)
         {
@@ -437,25 +452,25 @@ public:
         auto bytes_payload = buff_size < bytes_left ? buff_size : bytes_left;
         sge.length = bytes_payload;
 
-        bool unread = false;
+        // bool unread = false;
         auto t2 = high_resolution_clock::now();
         auto t3 = t2;
         //for(; j < buffers.size() && buff_size * j < file_info.file_size;)
             //readahead(fd,(j++) * buff_size, buff_size);
-        char sync_char = 'A';
+        char sync_char = 'Y';
         sockSyncData(1, (char *)&sync_char, (char *)&sync_char);
         // std::ofstream fout("rtt.txt");
         // cout  << "start:" << duration_cast<std::chrono::nanoseconds>(high_resolution_clock::now().time_since_epoch()).count() << endl;
         while (1)
         { 
-            if (unread)
+            // if (unread)
             {
                 // read(this->peer_fd, &sync_char, 1);
                 // if(sync_char != 'A')
                 // {
                 //     cout << "ERROR: sync post/recv WQE error." << endl;
                 // }
-                unread = false; //this cycle has synced.
+                // unread = false; //this cycle has synced.
             }
             //readahead(fd,file_info.file_size - bytes_left, sge.length);
             {
@@ -464,13 +479,13 @@ public:
                 // if(i == 0)
                 // {
                 // auto t_io_start = high_resolution_clock::now();
-                // read(fd, (char *)sge.addr, bytes_payload);
+                read(fd, (char *)sge.addr, bytes_payload);
                 // auto t_io_end = high_resolution_clock::now();
                 // duration<double> duration_io = duration_cast<duration<double>>(t_io_end - t_io_start);
                 // }
                 //cout << "read time: " << duration_io.count() << endl;
                 // delta_t_io += duration_io.count();
-                t3 = high_resolution_clock::now();
+                // t3 = high_resolution_clock::now();
                 auto ret = ibv_post_send(qp, &wr, &bad_wr);
 
                 if (ret != 0)
@@ -491,7 +506,8 @@ public:
                 wr.wr_id = id;
                 auto bytes_payload = buff_size < bytes_left ? buff_size : bytes_left;
                 sge.length = bytes_payload;
-                if((i % this->remote_qp_info.recv_depth) == 0) unread = true; //wait for sync
+                // if((i % this->remote_qp_info.recv_depth) == 0) unread = true; //wait for sync
+                if((i % this->remote_qp_info.block_num) == 0) unread = true; //wait for sync
             }
             
             do

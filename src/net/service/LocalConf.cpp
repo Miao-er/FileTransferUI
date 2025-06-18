@@ -87,7 +87,8 @@ int LocalConf::saveConf() {
          << "DefaultRate = " << this->defaultRate << "\n"
          << "BlockSize = " << this->blockSize << "\n"
          << "BlockNum = " << this->blockNum << "\n";
-
+         << "SavedFolderPath = " << this->savedFolderPath << "\n";
+    file << "# End of Configuration File\n";
     file.close();
     return 0;
 }
@@ -192,6 +193,17 @@ int LocalConf::loadConf() {
             {
                 std::cout << "[Error] Invalid BlockNum: " << value << std::endl;
                 std::cout << "Valid range: 1 ~ 65536" << std::endl;
+                return -1;
+            }
+        }
+        else if(key == "SavedFolderPath")
+        {
+            // wxString savedFolderPath = wxString::FromUTF8(value.c_str());
+            // this->savedFolderPath = savedFolderPath;
+            this->savedFolderPath = value; // Assuming value is a valid path string
+            if(!wxFileName::DirExists(this->savedFolderPath))
+            {
+                std::cout << "[Error] Invalid SavedFolderPath: " << value << std::endl;
                 return -1;
             }
         }
