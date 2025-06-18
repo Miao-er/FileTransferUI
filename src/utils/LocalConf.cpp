@@ -11,8 +11,8 @@ std::string getConfigPath()
         wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
     }
 
-    m_configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
-    return m_configPath.ToStdString();
+    wxString configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
+    return configPath.ToStdString();
 }
 
 bool LocalConf::isCommentOrEmpty(const std::string& line) const{
@@ -98,7 +98,7 @@ int LocalConf::saveConf() {
          << "MaxThreadNum = " << this->maxThreadNum << "\n"
          << "DefaultRate = " << this->defaultRate << "\n"
          << "BlockSize = " << this->blockSize << "\n"
-         << "BlockNum = " << this->blockNum << "\n";
+         << "BlockNum = " << this->blockNum << "\n"
          << "SavedFolderPath = " << this->savedFolderPath << "\n";
     file << "# End of Configuration File\n";
     file.close();
@@ -226,7 +226,7 @@ int LocalConf::loadConf() {
             // wxString savedFolderPath = wxString::FromUTF8(value.c_str());
             // this->savedFolderPath = savedFolderPath;
             this->savedFolderPath = wxString(value); // Assuming value is a valid path string
-            if(this->saveFolderPath.IsEmpty() || !wxFileName::DirExists(this->savedFolderPath))
+            if(this->savedFolderPath.IsEmpty() || !wxFileName::DirExists(this->savedFolderPath))
             {
                 std::cout << "[Error] Invalid SavedFolderPath: " << value << std::endl;
                 error = true;

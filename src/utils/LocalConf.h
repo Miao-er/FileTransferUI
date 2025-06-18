@@ -23,7 +23,7 @@ public:
         rdmaGidIndex(0),
         defaultRate(100.0),
         blockSize(1024), //in kbytes
-        blockNum(256),
+        blockNum(256)
     {
         this->savedFolderPath = wxStandardPaths::Get().GetDocumentsDir();
     }
