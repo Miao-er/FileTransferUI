@@ -16,15 +16,10 @@
 #include <fcntl.h>
 #include <fstream>
 #include "HwRdma.h"
-#include "../service/LocalConf.h"
+#include "../../utils/LocalConf.h"
 
 using std::chrono::duration_cast;
-struct IPInfo
-{
-    char local_ip[20];
-    char remote_ip[20];
-    char middle_ip[20];
-};
+
 struct QPInfo
 {
     uint16_t lid;
@@ -57,8 +52,8 @@ private:
     struct ibv_cq *cq = nullptr;
     struct ibv_qp *qp = nullptr;
     QPInfo local_qp_info, remote_qp_info;
-    ClientList *client_list;
-    LocalConf *local_conf;
+    ClientList *client_list = nullptr;
+    LocalConf *local_conf = nullptr;
 
 public:
 
@@ -68,8 +63,7 @@ public:
         this->peer_fd = peer_fd;
         this->default_rate = local_conf->getDefaultRate();
         this->local_conf = local_conf;
-        if(client_list)
-            this->client_list = client_list;
+        this->client_list = client_list;
     }
     ~StreamControl()
     {
@@ -89,19 +83,17 @@ public:
         if (mr != nullptr)
             hwrdma->destroy_mr(mr);
     }
-    int swapBufferConfig()
+
+    int bindMemoryRegion()
     {
-        
-    }
-    int bindMemoryRegion(uint64_t length)
-    {
+        size_t length = this->block_size * local_conf->getBlockNum() * 1024;
         if(hwrdma->create_mr(&this->mr,&this->buf_ptr,length))
         {
             return -1;
         }
         return 0;
     }
-    int createBufferPool(uint32_t blocks)
+    int createBufferPool()
     {
         if (!this->buf_ptr || ! this->mr)
         {
@@ -109,7 +101,7 @@ public:
             return -1;
         }
         uint64_t loc = 0;
-        this->block_size = this->mr->length / blocks;
+
         while (loc + this->block_size <= this->mr->length)
         {
             buffers.emplace_back((uint8_t *)buf_ptr + loc, this->block_size);
@@ -140,8 +132,8 @@ public:
         qp_init_attr.qp_type = IBV_QPT_RC;
         
         local_qp_info.lid = hwrdma->port_attr.lid;
-        local_qp_info.block_num = buffers.size();
-        local_qp_info.block_size = this->block_size;
+        local_qp_info.block_num = local_conf->getBlockNum();
+        local_qp_info.block_size = local_conf->getBlockSize();
         //local_qp_info.lucp_id = duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count(); //TODO
         // local_qp_info.recv_depth = qp_init_attr.cap.max_recv_wr; //must before create qp,or max_recv_wr will change.
         memcpy(local_qp_info.gid, &hwrdma->gid, 16);
@@ -300,6 +292,9 @@ public:
         remote_qp_info.block_size = ntohl(net_remote_qp_info.block_size);
         //remote_qp_info.recv_depth = ntohl(net_remote_qp_info.recv_depth);
         memcpy(remote_qp_info.gid, net_remote_qp_info.gid, 16);
+        //client apply block size from server
+        if(this->client_list == nullptr)
+            this->block_size = remote_qp_info.block_size;
 #ifdef DEBUG
         cout << "     local:" << endl
         << "       lid:" << local_qp_info.lid << endl

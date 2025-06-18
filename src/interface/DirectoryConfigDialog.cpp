@@ -5,6 +5,7 @@
 #include <wx/stdpaths.h>
 #include <wx/msgdlg.h>
 
+
 wxBEGIN_EVENT_TABLE(DirectoryConfigDialog, wxDialog)
     EVT_TREE_SEL_CHANGED(wxID_ANY, DirectoryConfigDialog::OnDirSelected)
     EVT_TREE_ITEM_EXPANDING(wxID_ANY, DirectoryConfigDialog::OnDirExpanding)
@@ -72,97 +73,103 @@ void DirectoryConfigDialog::InitializeUI() {
 }
 void DirectoryConfigDialog::LoadCurrentPath() {
     // 从配置文件读取当前路径
-    wxStandardPaths& paths = wxStandardPaths::Get();
-    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
-    wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
+    // wxStandardPaths& paths = wxStandardPaths::Get();
+    // wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
+    // wxString configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
     
     wxString currentPath;
 
-    if (wxFileName::FileExists(configPath)) {
-        wxTextFile file(configPath);
-        if (file.Open()) {
-            for (size_t i = 0; i < file.GetLineCount(); ++i) {
-                wxString line = file.GetLine(i).Trim();
-                if (line.StartsWith("storage_path=")) {
-                    m_savedPath = line.Mid(13); // 新增
-                    currentPath = m_savedPath;
-                    break;
-                }
-            }
-            file.Close();
-        }
-    }
+    // if (wxFileName::FileExists(configPath)) {
+    //     wxTextFile file(configPath);
+    //     if (file.Open()) {
+    //         for (size_t i = 0; i < file.GetLineCount(); ++i) {
+    //             wxString line = file.GetLine(i).Trim();
+    //             if (line.StartsWith("storage_path=")) {
+    //                 m_savedPath = line.Mid(13); // 新增
+    //                 currentPath = m_savedPath;
+    //                 break;
+    //             }
+    //         }
+    //         file.Close();
+    //     }
+    // }
 
-    // 如果没有找到配置或路径无效，使用默认路径
-    if (currentPath.IsEmpty() || !wxFileName::DirExists(currentPath)) {
-        currentPath = wxStandardPaths::Get().GetDocumentsDir();
-        wxTextFile file;
-        wxArrayString lines;
-        lines.Add("storage_path=" + currentPath);
-        if (file.Create(configPath) || file.Open(configPath)) {
-            file.Clear();
-            for (const wxString& line : lines) {
-                file.AddLine(line);
-            }
-            file.Write();
-            file.Close();
-        }
-    }
-
-    m_selectedPath = currentPath;
+    // // 如果没有找到配置或路径无效，使用默认路径
+    // if (currentPath.IsEmpty() || !wxFileName::DirExists(currentPath)) {
+    //     currentPath = wxStandardPaths::Get().GetDocumentsDir();
+    //     wxTextFile file;
+    //     wxArrayString lines;
+    //     lines.Add("storage_path=" + currentPath);
+    //     if (file.Create(configPath) || file.Open(configPath)) {
+    //         file.Clear();
+    //         for (const wxString& line : lines) {
+    //             file.AddLine(line);
+    //         }
+    //         file.Write();
+    //         file.Close();
+    //     }
+    // }
+    m_localConf = new LocalConf(getConfigPath());
+    m_localConf->loadConf();
+    if(m_localConf->getSavedFolderPath().IsEmpty() || !wxFileName::DirExists(m_localConf->getSavedFolderPath()))
+        m_localConf->setSavedFolderPath(wxStandardPaths::Get().GetDocumentsDir());
+    
+    m_selectedPath = m_localConf->getSavedFolderPath();
     // 新增：显示之前保存的路径（即使无效也显示）
     if (m_savedPathLabel) {
-        m_savedPathLabel->SetLabel("当前接收文件存储位置：" + m_savedPath);
+        m_savedPathLabel->SetLabel(_T("当前接收文件存储位置：") + m_localConf->getSavedFolderPath());
     }
     UpdatePathDisplay();
     ExpandAndSelectPath(m_selectedPath);
 }
 
 void DirectoryConfigDialog::SavePathToConfig(const wxString& path) {
-    wxStandardPaths& paths = wxStandardPaths::Get();
-    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
-    wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
+    // wxStandardPaths& paths = wxStandardPaths::Get();
+    // wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
+    // wxString configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
     
     // 确保配置目录存在
-    if (!wxFileName::DirExists(configDir)) {
-        wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
-    }
+    // if (!wxFileName::DirExists(configDir)) {
+    //     wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    // }
     
     // 读取现有配置
-    wxArrayString lines;
-    bool foundStoragePath = false;
+    // wxArrayString lines;
+    // bool foundStoragePath = false;
     
-    if (wxFileName::FileExists(configPath)) {
-        wxTextFile file(configPath);
-        if (file.Open()) {
-            for (size_t i = 0; i < file.GetLineCount(); ++i) {
-                wxString line = file.GetLine(i);
-                if (line.StartsWith("storage_path=")) {
-                    lines.Add("storage_path=" + path);
-                    foundStoragePath = true;
-                } else {
-                    lines.Add(line);
-                }
-            }
-            file.Close();
-        }
-    }
+    // if (wxFileName::FileExists(configPath)) {
+    //     wxTextFile file(configPath);
+    //     if (file.Open()) {
+    //         for (size_t i = 0; i < file.GetLineCount(); ++i) {
+    //             wxString line = file.GetLine(i);
+    //             if (line.StartsWith("storage_path=")) {
+    //                 lines.Add("storage_path=" + path);
+    //                 foundStoragePath = true;
+    //             } else {
+    //                 lines.Add(line);
+    //             }
+    //         }
+    //         file.Close();
+    //     }
+    // }
     
-    // 如果没有找到storage_path行，添加它
-    if (!foundStoragePath) {
-        lines.Add("storage_path=" + path);
-    }
+    // // 如果没有找到storage_path行，添加它
+    // if (!foundStoragePath) {
+    //     lines.Add("storage_path=" + path);
+    // }
     
-    // 写回文件
-    wxTextFile file;
-    if (file.Create(configPath) || file.Open(configPath)) {
-        file.Clear();
-        for (const wxString& line : lines) {
-            file.AddLine(line);
-        }
-        file.Write();
-        file.Close();
-    }
+    // // 写回文件
+    // wxTextFile file;
+    // if (file.Create(configPath) || file.Open(configPath)) {
+    //     file.Clear();
+    //     for (const wxString& line : lines) {
+    //         file.AddLine(line);
+    //     }
+    //     file.Write();
+    //     file.Close();
+    // }
+    m_localConf->setSavedFolderPath(path);
+    m_localConf->saveConf();
 }
 
 void DirectoryConfigDialog::PopulateDirectoryTree() {
@@ -220,7 +227,7 @@ void DirectoryConfigDialog::AddDirectoryChildren(wxTreeItemId parent, const wxSt
 }
 
 void DirectoryConfigDialog::UpdatePathDisplay() {
-    m_savedPathLabel->SetLabel(_T("当前接收文件存储位置：") + m_savedPath);
+    m_savedPathLabel->SetLabel(_T("当前接收文件存储位置：") + m_localConf->getSavedFolderPath());
 }
 void DirectoryConfigDialog::OnDirSelected(wxTreeEvent& event) {
     wxTreeItemId itemId = event.GetItem();

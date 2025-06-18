@@ -3,6 +3,7 @@
 
 #include <wx/wx.h>
 #include <wx/treectrl.h>
+#include "../utils/LocalConf.h"
 /**
  * @brief 自定义树节点数据类
  */
@@ -34,8 +35,9 @@ private:
     wxStaticText* m_savedPathLabel; // 新增
     wxButton* m_confirmBtn;
     wxButton* m_cancelBtn;
-    
+
     // 数据成员
+    LocalConf* m_localConf;
     wxString m_selectedPath;
     wxString m_savedPath; // 当前路径，用于加载和保存
     // 私有方法

@@ -2,6 +2,18 @@
 #include <fstream>
 #include <sstream>
 #include "LocalConf.h"
+#define PROGRAM_NAME "FileUploadClient"
+std::string getConfigPath()
+{
+    wxStandardPaths& paths = wxStandardPaths::Get();
+    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + PROGRAM_NAME;
+    if (!wxFileName::DirExists(configDir)) {
+        wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    }
+
+    m_configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
+    return m_configPath.ToStdString();
+}
 
 bool LocalConf::isCommentOrEmpty(const std::string& line) const{
     return line.empty() || line[0] == '#';
@@ -98,6 +110,7 @@ int LocalConf::loadConf() {
 
     if (!file.is_open()) {
         createDefaultConf();
+        file.open(this->configPath);
         if (!file.is_open()) {
             std::cout << "Failed to open configuration file: " << this->configPath << std::endl;
                 return -1;
@@ -106,8 +119,7 @@ int LocalConf::loadConf() {
     
     std::cout << "loading config \"" <<this->configPath << "\"..." << std::endl;
     std::string line;
-    bool inInterfaceSection = false;
-    bool inPeerSection = false;
+    bool error = false;
     
     while (std::getline(file, line)) {
         // 去除行首尾空格
@@ -120,7 +132,7 @@ int LocalConf::loadConf() {
         size_t pos = line.find('=');
         if (pos == std::string::npos) {
             std::cout << "[Error] Invalid config line: " << line << std::endl;
-                return -1;
+                error = true;
             }
 
         std::string key = line.substr(0, pos);
@@ -130,91 +142,116 @@ int LocalConf::loadConf() {
 
         if (key == "RdmaGidIndex") {
             if (!safeStringToInt(value, this->rdmaGidIndex, "RdmaGidIndex")) {
-                return -1;
+                error = true;
+                this->rdmaGidIndex = 0;
             }
             if(this->rdmaGidIndex < 0)
             {
                 std::cout << "[Error] Invalid RdmaGidIndex: " << value << std::endl;
-                return -1;
+                error = true;
+                this->rdmaGidIndex = 0;
             }
         }
         else if (key == "ListenPort")
         {
             if (!safeStringToInt(value, this->localPort, "ListenPort")) {
-                return -1;
+                error = true;
+                this->localPort = 52025;
             }
             if(this->localPort <= 0 || this->localPort > 65535)
             {
                 std::cout << "[Error] Invalid ListenPort: " << value << std::endl;
-                return -1;
+                error = true;
+                this->localPort = 52025;
             }
         }
         else if (key == "MaxThreadNum")
         {
             if (!safeStringToInt(value, this->maxThreadNum, "MaxThreadNum")) {
-                return -1;
+                error = true;
+                this->maxThreadNum = 16;
             }
             if(this->maxThreadNum <= 0 || this->maxThreadNum > 1024)
             {
                 std::cout << "[Error] Invalid MaxThreadNum: " << value << std::endl;
                 std::cout << "Valid range: 1 ~ 1024" << std::endl;
-                return -1;
+                error = true;
+                this->maxThreadNum = 16;
             }
         }
         else if (key == "DefaultRate")
         {
             if (!safeStringToDouble(value, this->defaultRate, "DefaultRate")) {
-                return -1;
+                
+                error = true;
+                this->defaultRate = 100.0;
             }
             if(this->defaultRate <= 0)
             {
                 std::cout << "[Error] Invalid DefaultRate: " << value << std::endl;
-                return -1;
+                error = true;
+                this->defaultRate = 100.0;
             }
         }
         else if (key == "BlockSize")
         {
             if (!safeStringToInt(value, this->blockSize, "BlockSize")) {
-                return -1;
+                error = true;
+                this->blockSize = 1024;
             }
             if(this->blockSize <= 4 || this->blockSize > 1024 * 1024)  //4k ~ 1G
             {
                 std::cout << "[Error] Invalid BlockSize: " << value << std::endl;
                 std::cout << "Valid range: 4 ~ 1048576" << std::endl;
-                return -1; // 修复：添加缺失的return
+                error = true;
+                this->blockSize = 1024;
             }
         }
         else if (key == "BlockNum")
         {
             if (!safeStringToInt(value, this->blockNum, "BlockNum")) {
-                return -1;
+                error = true;
+                this->blockNum = 256;
             }
             if(this->blockNum <= 0 || this->blockNum > 65536) // 1 ~ 65536
             {
                 std::cout << "[Error] Invalid BlockNum: " << value << std::endl;
                 std::cout << "Valid range: 1 ~ 65536" << std::endl;
-                return -1;
+                error = true;
+                this->blockNum = 256;
             }
         }
         else if(key == "SavedFolderPath")
         {
             // wxString savedFolderPath = wxString::FromUTF8(value.c_str());
             // this->savedFolderPath = savedFolderPath;
-            this->savedFolderPath = value; // Assuming value is a valid path string
-            if(!wxFileName::DirExists(this->savedFolderPath))
+            this->savedFolderPath = wxString(value); // Assuming value is a valid path string
+            if(this->saveFolderPath.IsEmpty() || !wxFileName::DirExists(this->savedFolderPath))
             {
                 std::cout << "[Error] Invalid SavedFolderPath: " << value << std::endl;
-                return -1;
+                error = true;
+                this->savedFolderPath = wxStandardPaths::Get().GetDocumentsDir();
             }
         }
         else
         {
             std::cout << "[Error] When parsing config_file, unknown key: " << key << std::endl;
-            return -1;
+            error = true;
         }
     }
-    
+    if(error)
+        return -1;
     file.close();
     std::cout << "Configuration loaded successfully from: " << this->configPath << std::endl;
     return 0; 
+}
+
+int LocalConf::initNewConf() {
+    this->maxThreadNum =16;
+    this->localPort = 52025;
+    this->rdmaGidIndex = 0;
+    this->defaultRate = 100.0;
+    this->blockSize = 1024; //in kbytes
+    this->blockNum = 256;
+    this->savedFolderPath = wxStandardPaths::Get().GetDocumentsDir();
 }

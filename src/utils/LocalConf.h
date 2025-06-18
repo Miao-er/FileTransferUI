@@ -9,10 +9,13 @@
 #include <wx/filename.h>
 #include <wx/string.h>
 
+std::string getConfigPath();
+
 class LocalConf {
 public:
     int loadConf();
     int saveConf();
+    int initNewConf();
     LocalConf(std::string path)
     : configPath(path), 
         maxThreadNum(16),

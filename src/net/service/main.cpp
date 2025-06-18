@@ -10,11 +10,8 @@
 #include <arpa/inet.h>
 #include <string>
 #include <unordered_map>
-#include <wx/wx.h>
-#include <wx/stdpaths.h>
-#include <wx/filename.h>
 
-#include "LocalConf.h"
+#include "../../utils/LocalConf.h"
 #include "../rdma/HwRdma.h"
 #include "../rdma/StreamControl.h"
 #include "ClientInfo.h"
@@ -56,15 +53,13 @@ void recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* c
                                 close(peer_fd); 
                                 client_list->removeClient(peer_fd);
                             });
-    if(stream_control.swapBufferConfig() == -1)
+    if (stream_control.createLucpContext() == -1)
+        return;
+    if (stream_control.connectPeer() == -1)
         return;
     if (stream_control.bindMemoryRegion() == -1)
         return;
     if (stream_control.createBufferPool() == -1)
-        return;
-    if (stream_control.createLucpContext() == -1)
-        return;
-    if (stream_control.connectPeer() == -1)
         return;
     if (stream_control.postRecvFile() == -1)
         return;
@@ -76,35 +71,23 @@ void sendData(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf)
                            {    
                                 close(peer_fd); 
                             });
-    if(stream_control.swapBufferConfig() == -1)
+    if (stream_control.createLucpContext() == -1)
+        return;
+    if (stream_control.connectPeer() == -1)
         return;
     if (stream_control.bindMemoryRegion() == -1)
         return;
     if (stream_control.createBufferPool() == -1)
         return;
-    if (stream_control.createLucpContext() == -1)
-        return;
-    if (stream_control.connectPeer() == -1)
-        return;
     if (stream_control.postSendFile() == -1)
         return;
 }
 
-string getConfigPath()
-{
-    wxStandardPaths& paths = wxStandardPaths::Get();
-    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
-    if (!wxFileName::DirExists(configDir)) {
-        wxFileName::Mkdir(configDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
-    }
-
-    m_configPath = configDir + wxFileName::GetPathSeparator() + "local.conf";
-    return m_configPath.ToStdString();
-}
 int main(int narg, char *argv[])
 {
     LocalConf local_conf(getConfigPath());
-    local_conf.loadConf();
+    if(local_conf.loadConf())
+        return -1;
     signal(SIGPIPE, SIG_IGN);
     // Create an hdRDMA object
     HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1, local_conf.getBlockSize() * local_conf.getBlockNum() * local_conf.getMaxThreadNum() * 1024);

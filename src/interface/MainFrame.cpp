@@ -235,24 +235,26 @@ void MainFrame::OnStorageLocation(wxCommandEvent& event) {
 
 void MainFrame::OnShowInBrowser(wxCommandEvent& event) {
     // 读取配置文件中的存储路径
-    wxStandardPaths& paths = wxStandardPaths::Get();
-    wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
-    wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
-    wxString storagePath;
+    // wxStandardPaths& paths = wxStandardPaths::Get();
+    // wxString configDir = paths.GetUserConfigDir() + wxFileName::GetPathSeparator() + "FileUploadClient";
+    // wxString configPath = configDir + wxFileName::GetPathSeparator() + "server.conf";
+    LocalConf local_conf(getConfigPath());
+    local_conf.loadConf();
+    wxString storagePath = local_conf.getSavedFolderPath();
 
-    if (wxFileName::FileExists(configPath)) {
-        wxTextFile file(configPath);
-        if (file.Open()) {
-            for (size_t i = 0; i < file.GetLineCount(); ++i) {
-                wxString line = file.GetLine(i).Trim();
-                if (line.StartsWith("storage_path=")) {
-                    storagePath = line.Mid(13);
-                    break;
-                }
-            }
-            file.Close();
-        }
-    }
+    // if (wxFileName::FileExists(configPath)) {
+    //     wxTextFile file(configPath);
+    //     if (file.Open()) {
+    //         for (size_t i = 0; i < file.GetLineCount(); ++i) {
+    //             wxString line = file.GetLine(i).Trim();
+    //             if (line.StartsWith("storage_path=")) {
+    //                 storagePath = line.Mid(13);
+    //                 break;
+    //             }
+    //         }
+    //         file.Close();
+    //     }
+    // }
     if (storagePath.IsEmpty() || !wxFileName::DirExists(storagePath)) {
         wxMessageBox(_T("未找到有效的本地存储路径，请先设置。"), _T("提示"), wxOK | wxICON_WARNING, this);
         return;
