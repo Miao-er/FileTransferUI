@@ -377,7 +377,7 @@ public:
                     // delta_io += delta_io_;
                     // delta += delta_;
                     // if(recv_num > 0 && (recv_num % local_qp_info.recv_depth == 0)) //all wqe is in free state
-                    //     write(this->peer_fd, "A", 1);
+                    send(this->peer_fd, "A", 1, MSG_DONTWAIT);
                 }
             }
         }
@@ -449,17 +449,34 @@ public:
 
         // bool unread = false;
         auto t2 = high_resolution_clock::now();
-        auto t3 = t2;
         //for(; j < buffers.size() && buff_size * j < file_info.file_size;)
             //readahead(fd,(j++) * buff_size, buff_size);
         char sync_char = 'Y';
         sockSyncData(1, (char *)&sync_char, (char *)&sync_char);
+        int remaining_recv_wqe = remote_qp_info.block_num;
         // std::ofstream fout("rtt.txt");
         // cout  << "start:" << duration_cast<std::chrono::nanoseconds>(high_resolution_clock::now().time_since_epoch()).count() << endl;
         while (1)
         { 
             // if (unread)
             {
+                while(1)
+                {
+                    int nb = recv(this->peer_fd, &sync_char, 1, MSG_DONTWAIT);
+                    if(nb == 0) return -1;
+                    else if(nb < 0 && errno == EWOULDBLOCK)
+                        break;
+                    else if(nb < 0 && errno == EINTR)
+                        continue;
+                    else if(nb < 0)
+                        return -1;
+                    else 
+                    {
+                        assert(sync_char == 'A');
+                        remaining_recv_wqe++;
+                    }
+                }
+
                 // read(this->peer_fd, &sync_char, 1);
                 // if(sync_char != 'A')
                 // {
@@ -468,6 +485,7 @@ public:
                 // unread = false; //this cycle has synced.
             }
             //readahead(fd,file_info.file_size - bytes_left, sge.length);
+            if(remaining_recv_wqe > 0)
             {
                 // Calculate bytes to be sent in this buffer
                 
@@ -490,6 +508,7 @@ public:
                 }
                 bytes_left -= bytes_payload;
                 Noutstanding_writes++;
+                remaining_recv_wqe --;
                 sendcnt++;
                 
                 i++;
@@ -502,7 +521,6 @@ public:
                 auto bytes_payload = buff_size < bytes_left ? buff_size : bytes_left;
                 sge.length = bytes_payload;
                 // if((i % this->remote_qp_info.recv_depth) == 0) unread = true; //wait for sync
-                if((i % this->remote_qp_info.block_num) == 0) unread = true; //wait for sync
             }
             
             do
