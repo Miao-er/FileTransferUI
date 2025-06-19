@@ -7,7 +7,7 @@
 #include <wx/splitter.h>
 #include <wx/dir.h>
 #include "ServerConfig.h"
-
+#include "../net/StreamControl.h"
 class UploadProgressDialog;
 
 /**
@@ -26,7 +26,7 @@ private:
  */
 class FileExplorerFrame : public wxFrame {
 public:
-    FileExplorerFrame(wxWindow* parent, const ServerInfo& server);
+    FileExplorerFrame(wxWindow* parent, const ServerInfo& server, StreamControl *stream_control);
     virtual ~FileExplorerFrame();
 
 private:
@@ -41,6 +41,7 @@ private:
     
     // 数据
     ServerInfo m_serverInfo;
+    StreamControl *m_streamControl;
     wxString m_currentPath;
     wxString m_selectedFile;
     UploadProgressDialog* m_progressDialog;

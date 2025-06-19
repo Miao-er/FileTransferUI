@@ -37,12 +37,12 @@ bool ServerConfig::LoadConfig() {
         wxString line = file.GetLine(i).Trim();
         if (line.IsEmpty() || line.StartsWith("#")) {
             continue; // 跳过空行和注释
-}
+        }
 
         ServerInfo server = ParseConfigLine(line);
         if (!server.name.IsEmpty()) {
-    m_servers.push_back(server);
-}
+            m_servers.push_back(server);
+        }
     }
     
     file.Close();
@@ -92,7 +92,7 @@ void ServerConfig::UpdateServer(size_t index, const ServerInfo& server) {
     }
 }
 
-const ServerInfo& ServerConfig::GetServer(size_t index) const {
+ServerInfo& ServerConfig::GetServer(size_t index) {
     static ServerInfo empty;
     if (index < m_servers.size()) {
         return m_servers[index];

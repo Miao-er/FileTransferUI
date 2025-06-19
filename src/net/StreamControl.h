@@ -1,6 +1,6 @@
 #ifndef STREAM_CONTROL_H
 #define STREAM_CONTROL_H
-
+class StreamControl;
 #include <infiniband/verbs.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -16,7 +16,8 @@
 #include <fcntl.h>
 #include <fstream>
 #include "HwRdma.h"
-#include "../../utils/LocalConf.h"
+#include "../utils/LocalConf.h"
+#include "../interface/UploadProgressDialog.h"
 
 using std::chrono::duration_cast;
 
@@ -54,10 +55,9 @@ private:
     QPInfo local_qp_info, remote_qp_info;
     ClientList *client_list = nullptr;
     LocalConf *local_conf = nullptr;
-
 public:
 
-    StreamControl(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf, ClientList *client_list)
+    StreamControl(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf, ClientList *client_list = nullptr)
     {
         this->hwrdma = hwrdma;
         this->peer_fd = peer_fd;
@@ -65,6 +65,7 @@ public:
         this->local_conf = local_conf;
         this->client_list = client_list;
     }
+
     ~StreamControl()
     {
         if (qp != nullptr)
@@ -153,29 +154,28 @@ public:
         int rc;
         int read_bytes = 0;
         int total_read_bytes = 0;
-        rc = write(peer_fd, local_data, xfer_size);
-
-        if (rc < xfer_size)
+        while((rc = send(peer_fd, local_data, xfer_size, MSG_NOSIGNAL)) <= 0)
         {
-            cout << "ERROR: Failed writing data during sock_sync_data." << endl;
-            return -1;
+            if (rc == 0 || (rc < 0 && errno != EINTR))
+            {
+                cout << "ERROR: Failed writing data during sock_sync_data." << endl;
+                return -1;
+            }
         }
-        else
-            rc = 0;
 
-        while (!rc && total_read_bytes < xfer_size)
+        while (total_read_bytes < xfer_size)
         {
             read_bytes = read(peer_fd, remote_data, xfer_size);
             if (read_bytes > 0)
             {
                 total_read_bytes += read_bytes;
             }
-            else
-            {
-                rc = read_bytes;
-            }
+            else if(read_bytes < 0 && errno == EINTR)
+                continue;
+            else 
+                return -1;
         }
-        return rc;
+        return 0;
     }
     int changeQPState()
     {
@@ -197,7 +197,7 @@ public:
             if (ret != 0)
             {
                 cout << "ERROR: Unable to set QP to INIT state!" << endl;
-                return ret;
+                return -1;
             }
         }
         /* Change QP state to RTR */
@@ -231,7 +231,7 @@ public:
             if (ret != 0)
             {
                 cout << "ERROR: Unable to set QP to RTR state!" << endl;
-                return ret;
+                return -1;
             }
         }
 
@@ -253,7 +253,7 @@ public:
             if (ret != 0)
             {
                 cout << "ERROR: Unable to set QP to RTS state!" << endl;
-                return ret;
+                return -1;
             }
         }
         return 0;
@@ -264,7 +264,7 @@ public:
         if(sockSyncData(1,"R",&remote_ready_char))
         {
             cout << "ERROR: connect failed when sync ready info." << endl;
-            return -1;
+            return -2;
         }
         if(remote_ready_char != 'R')
         {
@@ -283,7 +283,7 @@ public:
         if (sockSyncData(sizeof(QPInfo), (char *)&net_local_qp_info, (char *)&net_remote_qp_info) < 0)
         {
             cout << "ERROR: connect failed when sync qpinfo." << endl;
-            return -1;
+            return -2;
         }
         remote_qp_info.lid = ntohs(net_remote_qp_info.lid);
         //remote_qp_info.lucp_id = ntohs(net_remote_qp_info.lucp_id);
@@ -323,7 +323,7 @@ public:
         if (sockSyncData(sizeof(file_info), (char *)&file_info, (char *)&remote_file_info) != 0)
         {
             cout << "ERROR: synchronous failed before post file." << endl;
-            return -1;
+            return -2;
         }
         local_conf->loadConf();
         string save_path = local_conf->getSavedFolderPath().ToStdString() + wxFileName::GetPathSeparator().ToStdString() + remote_file_info.file_path;
@@ -341,7 +341,8 @@ public:
         double delta_io = 0,delta = 0;
         int recv_num = 0;
         char sync_char = 'Y';
-        sockSyncData(1, (char *)&sync_char, (char *)&sync_char);
+       if(sockSyncData(1, (char *)&sync_char, (char *)&sync_char) == -1)
+            return -2;
         while(recv_bytes < remote_file_info.file_size)
         {
             int n = ibv_poll_cq(cq, 1, wc);
@@ -377,7 +378,13 @@ public:
                     // delta_io += delta_io_;
                     // delta += delta_;
                     // if(recv_num > 0 && (recv_num % local_qp_info.recv_depth == 0)) //all wqe is in free state
-                    send(this->peer_fd, "A", 1, MSG_DONTWAIT);
+                    int rc;
+                    while((rc = send(this->peer_fd, "A", 1, MSG_NOSIGNAL)) <= 0)
+                    {
+                        if (rc == 0 || (rc < 0 && errno != EINTR))
+                            return -2;
+                    }
+
                 }
             }
         }
@@ -388,7 +395,7 @@ public:
         cout << "finish receive file:" << remote_file_info.file_path << "(" << (double)remote_file_info.file_size/1e9 << "GB)" << endl;
         return 0;
     }
-    int postSendFile(const char *file_path, const char *file_name)
+    int postSendFile(const char *file_path, const char *file_name, UploadThread*  upload_thread)
     {
         struct stat statbuf;
         auto ret = stat(file_path, &statbuf);
@@ -403,7 +410,7 @@ public:
         if (sockSyncData(sizeof(file_info), (char *)&file_info, (char *)&remote_file_info) != 0)
         {
             cout << "ERROR: synchronous failed before post file." << endl;
-            return -1;
+            return -2;
         }
         if (strcmp(remote_file_info.file_path, "READY_TO_RECEIVE") != 0)
         {
@@ -432,13 +439,13 @@ public:
         sge.lkey = this->mr->lkey;
 
         uint64_t bytes_left = file_info.file_size;
+        uint64_t ack_bytes = 0;
         uint32_t Noutstanding_writes = 0;
         double delta_t_io = 0.0;
         
         uint32_t sendcnt = 0, compcnt = 0;
         struct ibv_wc *wc = new ibv_wc[buffers.size()];
         std::list<high_resolution_clock::time_point> uncomplete_tp;
-        auto t1 = high_resolution_clock::now();
         uint32_t i = 0;
 
         auto buff_size = std::get<1>(buffers[0]);
@@ -448,12 +455,15 @@ public:
         sge.length = bytes_payload;
 
         // bool unread = false;
-        auto t2 = high_resolution_clock::now();
         //for(; j < buffers.size() && buff_size * j < file_info.file_size;)
             //readahead(fd,(j++) * buff_size, buff_size);
         char sync_char = 'Y';
-        sockSyncData(1, (char *)&sync_char, (char *)&sync_char);
+        if(sockSyncData(1, (char *)&sync_char, (char *)&sync_char))
+            return -2;
         int remaining_recv_wqe = remote_qp_info.block_num;
+        auto t1 = high_resolution_clock::now();
+        auto t2 = t1;
+        auto last_time = t1;
         // std::ofstream fout("rtt.txt");
         // cout  << "start:" << duration_cast<std::chrono::nanoseconds>(high_resolution_clock::now().time_since_epoch()).count() << endl;
         while (1)
@@ -463,13 +473,13 @@ public:
                 while(1)
                 {
                     int nb = recv(this->peer_fd, &sync_char, 1, MSG_DONTWAIT);
-                    if(nb == 0) return -1;
+                    if(nb == 0) return -2;
                     else if(nb < 0 && errno == EWOULDBLOCK)
                         break;
                     else if(nb < 0 && errno == EINTR)
                         continue;
                     else if(nb < 0)
-                        return -1;
+                        return -2;
                     else 
                     {
                         assert(sync_char == 'A');
@@ -525,7 +535,7 @@ public:
             
             do
             {
-                int n = ibv_poll_cq(cq, buffers.size(), wc);
+                int n = ibv_poll_cq(cq,1, wc);
                 // cout << Noutstanding_writes << endl;
                 // cout << n << endl;
                 if (n < 0)
@@ -552,6 +562,16 @@ public:
                         // uncomplete_tp.pop_front();
                         compcnt++;
                         Noutstanding_writes--;
+
+                        ack_bytes += wc[i].byte_len;
+                        last_time = high_resolution_clock::now();
+                        auto period = duration_cast<duration<double>>(last_time - t1).count();
+                        int ret = upload_thread->caculateTransferInfo(ack_bytes, period, wc[i].bytes_len);
+                        if(ret < 0)
+                        {
+                            printf("ERROR: caculateTransferInfo failed because thread cancelled.\n");
+                            return 1;
+                        }
                     }
                 }
             } while (Noutstanding_writes >= buffers.size() || (bytes_left == 0 && Noutstanding_writes > 0));
@@ -606,5 +626,26 @@ public:
         return 0;
     }
 };
+
+int recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* client_list)
+{
+    StreamControl stream_control(hwrdma, peer_fd, local_conf->getDefaultRate(),  client_list);
+    std::shared_ptr<int> x(NULL, [&](int *)
+                           {    
+                                close(peer_fd); 
+                                client_list->removeClient(peer_fd);
+                            });
+    if (stream_control.createLucpContext())
+        return -1;
+    if (stream_control.connectPeer())
+        return -1;
+    if (stream_control.bindMemoryRegion())
+        return -1;
+    if (stream_control.createBufferPool())
+        return -1;
+    while (stream_control.postRecvFile())
+        return -1;
+    return 0;
+}
 
 #endif

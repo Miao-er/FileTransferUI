@@ -7,6 +7,12 @@
 #include <wx/filename.h>
 #include <wx/textfile.h>
 #include <wx/utils.h> // for wxLaunchDefaultBrowser
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <iostream>
+#include "../utils/LocalConf.h"
+#include "../net/StreamControl.h"
 
 wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_BUTTON(ID_ADD_SERVER, MainFrame::OnAdd)
@@ -167,17 +173,77 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
     int index = GetSelectedServerIndex();
     if (index == -1) return;
     
-    const ServerInfo& server = m_config->GetServer(index);
-    printf("OnConnect: %s\n", std::string(server.name).c_str());
+    ServerInfo& server = m_config->GetServer(index);
     // 如果已有文件浏览器窗口，先关闭它
     if (m_explorerFrame) {
         printf("OnConnect: %s\n", "close");
         m_explorerFrame->Destroy();
         m_explorerFrame = nullptr;
     }
-    
+    struct sockaddr_in addr;
+    bzero(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(server.ip.ToStdString().c_str());
+    addr.sin_port = htons(server.port);
+    int peer_fd = socket(AF_INET, SOCK_STREAM, 0);
+    auto ret = connect(peer_fd, (struct sockaddr *)&addr, sizeof(addr));
+    if (ret != 0)
+    {
+        std::cout << "ERROR: connecting to server: " << server.ip.ToStdString().c_str() << std::endl;
+        
+        // 关闭socket文件描述符
+        close(peer_fd);
+        // 弹出错误消息框
+        wxMessageBox(_T("连接失败，请检查服务器配置"), _T("连接错误"), wxOK | wxICON_ERROR, this);
+        // 更新状态栏
+        SetStatusText("Connection failed");
+        return;
+    }
+    LocalConf local_conf(getConfigPath());
+    local_conf.loadConf();
+    HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1, (uint64_t)-1);
+    hwrdma.init();
+    StreamControl stream_control(hwrdma, peer_fd, local_conf);
+    int error_code = 0;
+    do{
+        if (stream_control.createLucpContext() == -1){
+            error_code = -1;
+            break;
+        }
+        ret = stream_control.connectPeer();
+        if(ret < 0)
+        {
+            error_code = ret;
+            break;
+        }
+        if (stream_control.bindMemoryRegion() == -1){
+            error_code = -1;
+            break;
+        }
+        if (stream_control.createBufferPool() == -1){
+            error_code = -1;
+            break;
+        }    
+    }while(0);
+    if(error_code == -2) 
+    {
+        wxMessageBox(_T("连接失败，服务器未在线"), _T("连接错误"), wxOK | wxICON_ERROR, this);
+        close(peer_fd);
+        SetStatusText("Connection failed");
+        return;
+    }
+    else if(error_code == -1)
+    {
+        wxMessageBox(_T("连接失败，请检查参数配置"), _T("创建错误"), wxOK | wxICON_ERROR, this);
+        close(peer_fd);
+        SetStatusText("Connection failed");
+        return;
+    }
+
+    std::cout << "Connected to " << server.ip.ToStdString().c_str() << ":" << server.port << std::endl;
+    server.fd = peer_fd;
     // 创建新的文件浏览器窗口
-    m_explorerFrame = new FileExplorerFrame(this, server);
+    m_explorerFrame = new FileExplorerFrame(this, server, &stream_control);
     m_explorerFrame->Show(true);
     // 隐藏主窗口
     Hide();
@@ -242,19 +308,6 @@ void MainFrame::OnShowInBrowser(wxCommandEvent& event) {
     local_conf.loadConf();
     wxString storagePath = local_conf.getSavedFolderPath();
 
-    // if (wxFileName::FileExists(configPath)) {
-    //     wxTextFile file(configPath);
-    //     if (file.Open()) {
-    //         for (size_t i = 0; i < file.GetLineCount(); ++i) {
-    //             wxString line = file.GetLine(i).Trim();
-    //             if (line.StartsWith("storage_path=")) {
-    //                 storagePath = line.Mid(13);
-    //                 break;
-    //             }
-    //         }
-    //         file.Close();
-    //     }
-    // }
     if (storagePath.IsEmpty() || !wxFileName::DirExists(storagePath)) {
         wxMessageBox(_T("未找到有效的本地存储路径，请先设置。"), _T("提示"), wxOK | wxICON_WARNING, this);
         return;

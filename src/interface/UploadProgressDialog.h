@@ -1,27 +1,26 @@
 #ifndef UPLOADPROGRESSDIALOG_H
 #define UPLOADPROGRESSDIALOG_H
-
+class UploadThread;
 #include <wx/wx.h>
 #include <wx/gauge.h>
 #include <wx/thread.h>
 #include <wx/file.h>
 #include <chrono>
-
+#include "../net/StreamControl.h"
 // 前向声明
 class UploadThread;
-
 // 自定义事件声明
 wxDECLARE_EVENT(wxEVT_UPLOAD_PROGRESS, wxCommandEvent);
 wxDECLARE_EVENT(wxEVT_UPLOAD_COMPLETE, wxCommandEvent);
 
 // 进度信息结构体
 struct ProgressInfo {
-    int percentage;
+    double percentage;
     wxULongLong bytesTransferred;
     wxULongLong totalBytes;
     double transferRate; // KB/s
     wxString status;
-    
+
     ProgressInfo() : percentage(0), bytesTransferred(0), totalBytes(0), transferRate(0.0) {}
 };
 
@@ -30,7 +29,7 @@ struct ProgressInfo {
  */
 class UploadProgressDialog : public wxDialog {
 public:
-    UploadProgressDialog(wxWindow* parent, const wxString& filepath);
+    UploadProgressDialog(wxWindow* parent, const wxString& filepath, StreamControl *streamControl);
     ~UploadProgressDialog();
     
     /**
@@ -53,7 +52,7 @@ private:
     bool m_cancelled;
     UploadThread* m_uploadThread;
     wxULongLong m_totalFileSize;      // 新增：总文件大小
-    
+    StreamControl *m_streamControl;
     // 私有方法
     wxString FormatFileSize(wxULongLong size);
     wxString FormatTransferRate(double rate);
@@ -76,9 +75,9 @@ private:
  */
 class UploadThread : public wxThread {
 public:
-    UploadThread(UploadProgressDialog* dialog, const wxString& filepath);
+    UploadThread(UploadProgressDialog* dialog, const wxString& filepath, StreamControl *streamControl);
     ~UploadThread();
-    
+    int caculateTransferInfo(unsigned long bytesTransferred, double duration, unsigned long piece_size);
 protected:
     virtual ExitCode Entry() override;
     
@@ -87,7 +86,8 @@ private:
     wxString m_filepath;
     wxULongLong m_totalSize;
     std::chrono::steady_clock::time_point m_startTime;
-    
+    StreamControl *m_streamControl;
+
     wxString FormatFileSize(wxULongLong size);
     void SendProgressUpdate(const ProgressInfo& info);
 };

@@ -17,7 +17,10 @@ public:
         this->buffer_size = buffer_size;
         this->free_size = buffer_size;
     }
-
+    int setFreeSize(uint64_t size)
+    {
+        this->free_size = size;
+    }
     int init()
     {
         cout << "Looking for IB devices ..." << endl;
@@ -120,6 +123,9 @@ public:
             cout << "ERROR: wrong size expected to create mr." <<endl;
             return -1;
         }
+        //for client, init only one mr dynamically
+        if(this->free_size == uint64_t(-1))
+            this->free_size = length;
         if (this->free_size < length)
         {
             cout << "ERROR: the remain free space is not enough!" << endl;

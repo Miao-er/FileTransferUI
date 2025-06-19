@@ -8,20 +8,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(wxWidgets REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
-# 源文件
-file(GLOB_RECURSE SOURCES "src/interface/*.cpp" "src/utils/*.cpp")
+# 项目1: FileUploadClient (原项目)
+file(GLOB_RECURSE CLIENT_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.app" "src/service/client.cpp")
+file(GLOB_RECURSE CLIENT_HEADERS "src/interface/*.h" "src/utils/*.h" "src/net/*.h")
 
-# 头文件
-file(GLOB_RECURSE HEADERS "src/interface/*.h" "src/utils/*.h")
-# 创建可执行文件
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(FileUploadClient ${CLIENT_SOURCES} ${CLIENT_HEADERS})
+target_link_libraries(FileUploadClient ${wxWidgets_LIBRARIES} ibverbs)
 
-# 链接 wxWidgets 库
-target_link_libraries(${PROJECT_NAME} ${wxWidgets_LIBRARIES})
+# 项目2: FileUploadServer (新项目)
+file(GLOB_RECURSE SERVER_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.app" "src/service/server.cpp")
+file(GLOB_RECURSE SERVER_HEADERS "src/server/*.h" "src/utils/*.h" "src/net/*.h")
 
-# 设置编译选项
+add_executable(FileUploadServer ${SERVER_SOURCES} ${SERVER_HEADERS})
+target_link_libraries(FileUploadServer ${wxWidgets_LIBRARIES} ibverbs)
+
+# 设置编译选项（应用到所有项目）
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+    target_compile_options(FileUploadClient PRIVATE /W4)
+    target_compile_options(FileUploadServer PRIVATE /W4)
 else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)
+    target_compile_options(FileUploadClient PRIVATE -Wall -Wextra -pedantic)
+    target_compile_options(FileUploadServer PRIVATE -Wall -Wextra -pedantic)
 endif()

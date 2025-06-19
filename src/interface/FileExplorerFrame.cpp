@@ -15,12 +15,11 @@ wxBEGIN_EVENT_TABLE(FileExplorerFrame, wxFrame)
     EVT_CLOSE(FileExplorerFrame::OnClose)
 wxEND_EVENT_TABLE()
 
-FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server)
+FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server, StreamControl *stream_control)
     : wxFrame(parent, wxID_ANY, 
               wxString::Format("File Explorer - %s", server.name),
               wxDefaultPosition, wxSize(900, 700)),
-      m_serverInfo(server), m_progressDialog(nullptr) {
-    
+      m_serverInfo(server), m_progressDialog(nullptr) , m_streamControl(stream_control){
     InitializeUI();
     PopulateDirectoryTree();
     
@@ -40,6 +39,11 @@ FileExplorerFrame::~FileExplorerFrame() {
     for (long i = 0; i < m_fileList->GetItemCount(); ++i) {
         wxString* path = reinterpret_cast<wxString*>(m_fileList->GetItemData(i));
         delete path;
+    }
+    if(m_serverInfo.fd > 0)
+    {
+        close(m_serverInfo.fd);
+        m_serverInfo.fd = -1;
     }
 }
 
@@ -411,7 +415,7 @@ void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
     
     // 创建上传进度对话框
 
-    m_progressDialog = new UploadProgressDialog(this, m_selectedFile);
+    m_progressDialog = new UploadProgressDialog(this, m_selectedFile, m_streamControl);
     printf("progress dialog created\n");
     // 先启动上传线程
     if (!m_progressDialog->StartUpload()) {
@@ -433,13 +437,19 @@ void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
     
     // 根据结果显示消息并处理后续操作
     if (result == wxID_OK) {
-        wxMessageBox("Upload Success!", "Complete", wxOK | wxICON_INFORMATION);
+        wxMessageBox("Upload Success", "Complete", wxOK | wxICON_INFORMATION);
         // 直接返回主界面，不使用 CallAfter
         //ReturnToMainFrame();
         printf("complete\n");
-    } else {
-        wxMessageBox("Upload Failed!", "Error", wxOK | wxICON_ERROR);
+    } else if (result == 0){
+        wxMessageBox("Upload Canceled", "Cancel", wxOK | wxICON_INFORMATION);
     }
+    else if(result == -2){
+        wxMessageBox("Server Disconnected", "Disconnect", wxOK | wxICON_ERROR);
+        ReturnToMainFrame();
+    }
+    else  
+        wxMessageBox("Upload Error", "Error", wxOK | wxICON_ERROR);
     printf("finish upload\n");
 }
 

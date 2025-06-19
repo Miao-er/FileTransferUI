@@ -8,10 +8,11 @@ struct ServerInfo {
     wxString name;
     wxString ip;
     int port;
+    int fd;
     
     ServerInfo() : port(0) {}
     ServerInfo(const wxString& n, const wxString& i, int p) 
-        : name(n), ip(i), port(p) {}
+        : name(n), ip(i), port(p), fd(-1) {}
 };
 
 /**
@@ -64,7 +65,7 @@ public:
      * @param index 索引
      * @return 服务器信息
      */
-    const ServerInfo& GetServer(size_t index) const;
+    ServerInfo& GetServer(size_t index);
 
 private:
     std::vector<ServerInfo> m_servers;
