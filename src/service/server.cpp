@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 #include "../utils/LocalConf.h"

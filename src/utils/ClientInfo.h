@@ -3,6 +3,8 @@
 
 #include <string>
 #include <stdint.h>
+#include <unordered_map>
+#include <mutex>
 class ClientInfo;
 
 enum ClientStatus 
@@ -11,16 +13,17 @@ enum ClientStatus
     CLIENT_STATUS_IDLE,
     CLIENT_STATUS_RECEIVING
 };
-struct FileInfo
-{
+// struct FileInfo
+// {
 
-    std::string fileName;
-    uint64_t fileSize;
-    uint64_t offset;
-    ClientInfo* client;
-    FileInfo(const std::string& fn, uint64_t fs, ClientInfo* c)
-        : fileName(fn), fileSize(fs), offset(0), client(c) {}
-};
+//     std::string fileName;
+//     uint64_t fileSize;
+//     uint64_t offset;
+//     ClientInfo* client;
+//     FileInfo():fileName(""), fileSize(0), offset(0), client(nullptr) {}
+//     FileInfo(const std::string& fn, uint64_t fs, ClientInfo* c)
+//         : fileName(fn), fileSize(fs), offset(0), client(c) {}
+// };
 
 struct ClientInfo 
 {
@@ -28,36 +31,38 @@ struct ClientInfo
     uint32_t ip;
     // 状态
     ClientStatus clientStat;
-    FileInfo fileInfo;
-    
+    // FileInfo fileInfo;
+    ClientInfo()
+    : fd(-1), ip(0), clientStat(CLIENT_STATUS_INVALID) {}
     ClientInfo(int f, uint32_t i) 
-    : fd(f), ip(i), clientStat(CLIENT_STATUS_IDLE), fileInfo(nullptr) {}
+    : fd(f), ip(i), clientStat(CLIENT_STATUS_IDLE){}
 };
 
 class ClientList{
 private:
-    unordered_map<int, ClientInfo> clientInfos;
-    mutex clientInfosMutex;
+    std::unordered_map<int, ClientInfo> clientInfos;
+    std::mutex clientInfosMutex;
 public:
     ClientList(){
         clientInfos.clear();
     }
     void addClient(int fd, uint32_t ip){
-        lock_guard<mutex> lock(clientInfosMutex);
+        std::lock_guard<std::mutex> lock(clientInfosMutex);
         clientInfos.emplace(fd, ClientInfo(fd, ip));
     }
     void removeClient(int fd){
-        lock_guard<mutex> lock(clientInfosMutex);
+        std::lock_guard<std::mutex> lock(clientInfosMutex);
         if(clientInfos.find(fd) != clientInfos.end())
             clientInfos.erase(fd);
     }
-    void getClientNum()
+    int getClientNum()
     {
-        lock_guard<mutex> lock(clientInfosMutex);
+        std::lock_guard<std::mutex> lock(clientInfosMutex);
         return clientInfos.size();
     }
-    Client& getClientInfo(int fd){
-        lock_guard<mutex> lock(clientInfosMutex);
+    ClientInfo& getClientInfo(int fd){
+        std::lock_guard<std::mutex> lock(clientInfosMutex);
+        assert(clientInfos.find(fd) != clientInfos.end());
         return clientInfos[fd];
     }
 };

@@ -9,14 +9,14 @@ find_package(wxWidgets REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
 # 项目1: FileUploadClient (原项目)
-file(GLOB_RECURSE CLIENT_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.app" "src/service/client.cpp")
+file(GLOB_RECURSE CLIENT_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.cpp" "src/service/client.cpp")
 file(GLOB_RECURSE CLIENT_HEADERS "src/interface/*.h" "src/utils/*.h" "src/net/*.h")
 
 add_executable(FileUploadClient ${CLIENT_SOURCES} ${CLIENT_HEADERS})
 target_link_libraries(FileUploadClient ${wxWidgets_LIBRARIES} ibverbs)
 
 # 项目2: FileUploadServer (新项目)
-file(GLOB_RECURSE SERVER_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.app" "src/service/server.cpp")
+file(GLOB_RECURSE SERVER_SOURCES "src/interface/*.cpp" "src/utils/*.cpp" "src/net/*.cpp" "src/service/server.cpp")
 file(GLOB_RECURSE SERVER_HEADERS "src/server/*.h" "src/utils/*.h" "src/net/*.h")
 
 add_executable(FileUploadServer ${SERVER_SOURCES} ${SERVER_HEADERS})

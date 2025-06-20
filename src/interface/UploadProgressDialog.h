@@ -7,8 +7,6 @@ class UploadThread;
 #include <wx/file.h>
 #include <chrono>
 #include "../net/StreamControl.h"
-// 前向声明
-class UploadThread;
 // 自定义事件声明
 wxDECLARE_EVENT(wxEVT_UPLOAD_PROGRESS, wxCommandEvent);
 wxDECLARE_EVENT(wxEVT_UPLOAD_COMPLETE, wxCommandEvent);
