@@ -25,7 +25,7 @@ int main(int narg, char *argv[])
         return -1;
     signal(SIGPIPE, SIG_IGN);
     // Create an hdRDMA object
-    HwRdma hwrdma(local_conf.getRdmaGidIndex(), local_conf.getBlockSize() * local_conf.getBlockNum() * local_conf.getMaxThreadNum() * 1024);
+    HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1024UL * local_conf.getBlockSize() * local_conf.getBlockNum() * local_conf.getMaxThreadNum());
     if(hwrdma.init())
     {
         cout << "ERROR: initializing hwrdma!" << endl;

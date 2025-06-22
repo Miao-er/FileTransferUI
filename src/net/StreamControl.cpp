@@ -37,7 +37,7 @@ StreamControl::~StreamControl()
 }
 int StreamControl::bindMemoryRegion()
 {
-    size_t length = this->block_size * local_conf->getBlockNum() * 1024;
+    size_t length = 1024UL * this->block_size * local_conf->getBlockNum();
     if (hwrdma->create_mr(&this->mr, &this->buf_ptr, length))
     {
         return -1;
@@ -258,7 +258,7 @@ int StreamControl::connectPeer()
         cout << std::hex << (int)local_qp_info.gid[i];
         if(i < 15) cout << ":";
     }
-    cout << endl;
+    cout << std::oct << endl;
     // << "recv_depth:" << local_qp_info.recv_depth << endl
     cout << "    remote:" << endl
     << "       lid:" << remote_qp_info.lid << endl
@@ -271,7 +271,7 @@ int StreamControl::connectPeer()
         cout << std::hex << (int)remote_qp_info.gid[i];
         if(i < 15) cout << ":";
     }
-    cout << endl;
+    cout << std::oct << endl;
     // << "recv_depth:" << remote_qp_info.recv_depth << endl;
 #endif
     return changeQPState();
