@@ -201,8 +201,14 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
     }
     LocalConf local_conf(getConfigPath());
     local_conf.loadConf();
-    HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1, (uint64_t)-1);
-    hwrdma.init();
+    HwRdma hwrdma(local_conf.getRdmaGidIndex(), (uint64_t)-1);
+    if(hwrdma.init())
+    {
+        wxMessageBox(_T("RDMA初始化失败，请检查配置"), _T("初始化错误"), wxOK | wxICON_ERROR, this);
+        close(peer_fd);
+        SetStatusText("RDMA initialization failed");
+        return;
+    }
     StreamControl stream_control(&hwrdma, peer_fd, &local_conf);
     int error_code = 0;
     do{

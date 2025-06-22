@@ -10,10 +10,9 @@ using std::cout, std::endl;
 class HwRdma
 {
 public:
-    HwRdma(int gid_idx, int port_num, uint64_t buffer_size)
+    HwRdma(int gid_idx, uint64_t buffer_size)
     {
         this->gid_idx = gid_idx;
-        this->port_num = port_num;
         this->buffer_size = buffer_size;
         this->free_size = buffer_size;
     }
@@ -51,33 +50,60 @@ public:
                 transport_type = "UNKNOWN";
                 break;
             }
-            uint64_t lid = 0;
-             // Open device
-            struct ibv_context *local_ctx = ibv_open_device(devs[i]);
-            struct ibv_port_attr local_port_attr;
-
-            if (local_ctx)
-            {
-                auto ret = ibv_query_port(local_ctx, this->port_num, &local_port_attr);
-                if (this->dev == nullptr && ret == 0)
-                {
-                    this->dev = devs[i];
-                }
-                ibv_close_device(local_ctx);
-
-            }
-            // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
             cout << "   device " << i
                  << " : " << devs[i]->name
                  << " : " << devs[i]->dev_name
                  << " : " << transport_type
                  << " : " << ibv_node_type_str(devs[i]->node_type)
                  << endl;
+
+             // Open device
+
+            if (this->dev == nullptr)
+            {
+                struct ibv_context *local_ctx = ibv_open_device(devs[i]);
+                if(local_ctx == nullptr)
+                {
+                    cout << "ERROR: opening device " << devs[i]->name << endl;
+                    continue;
+                }
+                struct ibv_device_attr local_attr;
+                struct ibv_port_attr local_port_attr;
+                auto ret = ibv_query_device(local_ctx, &local_attr);
+                if(ret != 0)
+                {
+                    cout << "ERROR: ibv_query_device failed for device " << i << endl;
+                    ibv_close_device(local_ctx);
+                    continue;
+                }
+                for(int j = 0; j < local_attr.phys_port_cnt; j++)
+                {
+                    auto ret = ibv_query_port(local_ctx, j + 1, &local_port_attr);
+                    if(ret != 0)
+                    {
+                        cout << "ERROR: ibv_query_port failed for device " << devs[i]->name << " port " << j + 1 << endl;
+                        continue;
+                    }
+                    if(local_port_attr.state == IBV_PORT_ACTIVE &&
+                       local_port_attr.link_layer == IBV_LINK_LAYER_ETHERNET)
+                    {
+                        this->dev = devs[i];
+                        this->port_num = j + 1;
+                        break;
+                    }
+                }
+                ibv_close_device(local_ctx);
+            }
+            // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
         cout << "=============================================" << endl
              << endl;
-
+        if(this->dev == nullptr)
+        {
+            cout << "ERROR: No suitable IB device found!" << endl;
+            ibv_free_device_list(devs);
+            return -1;
+        }   
         // Open device
         this->ctx = ibv_open_device(this->dev);
         ibv_free_device_list(devs);
@@ -90,13 +116,17 @@ public:
         ibv_query_device(this->ctx, &this->attr);
         ibv_query_port(this->ctx, this->port_num, &this->port_attr);
         ibv_query_gid(this->ctx, this->port_num, this->gid_idx, &this->gid);
-
-        cout << "Device " << dev->name << " opened."
-             << " num_comp_vectors=" << ctx->num_comp_vectors
-             << endl;
+        if(this->gid_idx < 0 || this->gid_idx >= this->port_attr.gid_tbl_len)
+        {
+            cout << "ERROR: gid index" << this->gid_idx << " out of range." << endl;
+            ibv_close_device(this->ctx);
+            return -1;
+        }
+        cout << "Device " << this->dev->name << " opened,"
+            << " gid_idx=" << this->gid_idx << endl;
 
         // Print some of the port attributes
-        cout << "Port attributes:" << endl;
+        cout << "Port " << this->port_num << " attributes:" << endl;
         cout << "           state: " << port_attr.state << endl;
         cout << "         max_mtu: " << port_attr.max_mtu << endl;
         cout << "      active_mtu: " << port_attr.active_mtu << endl;

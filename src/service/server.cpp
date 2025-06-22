@@ -25,9 +25,12 @@ int main(int narg, char *argv[])
         return -1;
     signal(SIGPIPE, SIG_IGN);
     // Create an hdRDMA object
-    HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1, local_conf.getBlockSize() * local_conf.getBlockNum() * local_conf.getMaxThreadNum() * 1024);
-    hwrdma.init();
-
+    HwRdma hwrdma(local_conf.getRdmaGidIndex(), local_conf.getBlockSize() * local_conf.getBlockNum() * local_conf.getMaxThreadNum() * 1024);
+    if(hwrdma.init())
+    {
+        cout << "ERROR: initializing hwrdma!" << endl;
+        return -1;
+    }
     {
         struct sockaddr_in addr;
         bzero(&addr, sizeof(addr));

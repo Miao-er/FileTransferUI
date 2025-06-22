@@ -65,7 +65,7 @@ int StreamControl::createLucpContext()
     // create cp_channel
     comp_channel = ibv_create_comp_channel(hwrdma->ctx);
     // create cq
-    cq = ibv_create_cq(hwrdma->ctx, buffers.size(), NULL, comp_channel, 0);
+    cq = ibv_create_cq(hwrdma->ctx, local_conf->getBlockNum(), NULL, comp_channel, 0);
     if (!cq)
     {
         cout << "ERROR: Unable to create Completion Queue" << endl;
@@ -76,8 +76,8 @@ int StreamControl::createLucpContext()
     bzero(&qp_init_attr, sizeof(qp_init_attr));
     qp_init_attr.send_cq = cq;
     qp_init_attr.recv_cq = cq;
-    qp_init_attr.cap.max_send_wr = buffers.size();
-    qp_init_attr.cap.max_recv_wr = buffers.size();
+    qp_init_attr.cap.max_send_wr = local_conf->getBlockNum();
+    qp_init_attr.cap.max_recv_wr = local_conf->getBlockNum();
     qp_init_attr.cap.max_send_sge = 1;
     qp_init_attr.cap.max_recv_sge = 1;
     qp_init_attr.qp_type = IBV_QPT_RC;
@@ -246,18 +246,32 @@ int StreamControl::connectPeer()
     //client apply block size from server
     if(this->client_list == nullptr)
         this->block_size = remote_qp_info.block_size;
-#ifdef DEBUG
+#ifndef DEBUG
     cout << "     local:" << endl
     << "       lid:" << local_qp_info.lid << endl
     << "    qp_num:" << local_qp_info.qp_num << endl
     << " block_num:" << local_qp_info.block_num << endl
-    << "block_size:" << local_qp_info.block_size << endl
+    << "block_size:" << local_qp_info.block_size << endl;
+    cout << "    local_gid:";
+    for(int i = 0; i < 16; i++)
+    {
+        cout << std::hex << (int)local_qp_info.gid[i];
+        if(i < 15) cout << ":";
+    }
+    cout << endl;
     // << "recv_depth:" << local_qp_info.recv_depth << endl
-    << "    remote:" << endl
+    cout << "    remote:" << endl
     << "       lid:" << remote_qp_info.lid << endl
     << "    qp_num:" << remote_qp_info.qp_num << endl
     << " block_num:" << remote_qp_info.block_num << endl
     << "block_size:" << remote_qp_info.block_size << endl;
+    cout << "    remote_gid:";
+    for(int i = 0; i < 16; i++)
+    {
+        cout << std::hex << (int)remote_qp_info.gid[i];
+        if(i < 15) cout << ":";
+    }
+    cout << endl;
     // << "recv_depth:" << remote_qp_info.recv_depth << endl;
 #endif
     return changeQPState();
