@@ -203,7 +203,7 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
     local_conf.loadConf();
     HwRdma hwrdma(local_conf.getRdmaGidIndex(), 1, (uint64_t)-1);
     hwrdma.init();
-    StreamControl stream_control(hwrdma, peer_fd, local_conf);
+    StreamControl stream_control(&hwrdma, peer_fd, &local_conf);
     int error_code = 0;
     do{
         if (stream_control.createLucpContext() == -1){

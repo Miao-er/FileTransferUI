@@ -1,5 +1,5 @@
 #include <wx/wx.h>
-#include "MainFrame.h"
+#include "../interface/MainFrame.h"
 
 /**
  * @brief 文件上传客户端应用程序

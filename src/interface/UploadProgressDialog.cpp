@@ -326,7 +326,7 @@ int UploadThread::caculateTransferInfo(unsigned long bytesTransferred, double du
         // 计算传输速率
     
     double transferRate = 0.0;
-    if (elapsedSeconds > 0) {
+    if (duration > 0) {
         transferRate = bytes * 8 / duration; // bytes per second
     }
     
