@@ -37,7 +37,7 @@ StreamControl::~StreamControl()
 }
 int StreamControl::bindMemoryRegion()
 {
-    size_t length = 1024UL * this->block_size * local_conf->getBlockNum();
+    size_t length = this->block_size * local_conf->getBlockNum();
     if (hwrdma->create_mr(&this->mr, &this->buf_ptr, length))
     {
         return -1;
@@ -104,18 +104,23 @@ int StreamControl::sockSyncData(int xfer_size, char *local_data, char *remote_da
     int rc;
     int read_bytes = 0;
     int total_read_bytes = 0;
-    while((rc = send(peer_fd, local_data, xfer_size, MSG_NOSIGNAL)) <= 0)
+    cout << "sync peer_fd: " << this->peer_fd << endl;
+    while((rc = send(this->peer_fd, local_data, xfer_size, MSG_NOSIGNAL)) <= 0)
     {
         if (rc == 0 || (rc < 0 && errno != EINTR))
         {
             cout << "ERROR: Failed writing data during sock_sync_data." << endl;
+            cout << "errno: " << errno << endl;
+            cout << "strerror: " << strerror(errno) << endl;
+            cout << "rc: " << rc << endl;
+            cout << "peer_fd: " << peer_fd << endl;
             return -1;
         }
     }
 
     while (total_read_bytes < xfer_size)
     {
-        read_bytes = read(peer_fd, remote_data, xfer_size);
+        read_bytes = read(this->peer_fd, remote_data, xfer_size);
         if (read_bytes > 0)
         {
             total_read_bytes += read_bytes;
@@ -123,7 +128,14 @@ int StreamControl::sockSyncData(int xfer_size, char *local_data, char *remote_da
         else if(read_bytes < 0 && errno == EINTR)
             continue;
         else 
+        {
+            cout << "ERROR: Failed reading data during sock_sync_data." << endl;
+            cout << "errno: " << errno << endl;
+            cout << "strerror: " << strerror(errno) << endl;
+            cout << "read_bytes: " << read_bytes << endl;
+            cout << "peer_fd: " << this->peer_fd << endl;
             return -1;
+        }
     }
     return 0;
 }
@@ -245,33 +257,35 @@ int StreamControl::connectPeer()
     memcpy(remote_qp_info.gid, net_remote_qp_info.gid, 16);
     //client apply block size from server
     if(this->client_list == nullptr)
-        this->block_size = remote_qp_info.block_size;
+        this->block_size = 1024UL * remote_qp_info.block_size;
+    else
+        this->block_size = 1024UL * local_conf->getBlockSize();
 #ifndef DEBUG
     cout << "     local:" << endl
     << "       lid:" << local_qp_info.lid << endl
     << "    qp_num:" << local_qp_info.qp_num << endl
     << " block_num:" << local_qp_info.block_num << endl
-    << "block_size:" << local_qp_info.block_size << endl;
+    << "block_size:" << local_qp_info.block_size << "(KB)" << endl;
     cout << "    local_gid:";
     for(int i = 0; i < 16; i++)
     {
         cout << std::hex << (int)local_qp_info.gid[i];
         if(i < 15) cout << ":";
     }
-    cout << std::oct << endl;
+    cout << std::dec << endl;
     // << "recv_depth:" << local_qp_info.recv_depth << endl
     cout << "    remote:" << endl
     << "       lid:" << remote_qp_info.lid << endl
     << "    qp_num:" << remote_qp_info.qp_num << endl
     << " block_num:" << remote_qp_info.block_num << endl
-    << "block_size:" << remote_qp_info.block_size << endl;
+    << "block_size:" << remote_qp_info.block_size << "(KB)" << endl;
     cout << "    remote_gid:";
     for(int i = 0; i < 16; i++)
     {
         cout << std::hex << (int)remote_qp_info.gid[i];
         if(i < 15) cout << ":";
     }
-    cout << std::oct << endl;
+    cout << std::dec << endl;
     // << "recv_depth:" << remote_qp_info.recv_depth << endl;
 #endif
     return changeQPState();
@@ -279,7 +293,7 @@ int StreamControl::connectPeer()
 
 int StreamControl::postRecvFile()
 {
-    for(int i = 0; i < this->buffers.size(); i++)
+    for(uint64_t i = 0; i < this->buffers.size(); i++)
         postRecvWr(i);
 
     FileInfo file_info, remote_file_info;
@@ -412,7 +426,7 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
     uint32_t sendcnt = 0, compcnt = 0;
     struct ibv_wc *wc = new ibv_wc[buffers.size()];
     std::list<high_resolution_clock::time_point> uncomplete_tp;
-    uint32_t i = 0;
+    uint64_t i = 0;
 
     auto buff_size = std::get<1>(buffers[0]);
     sge.addr = (uint64_t)std::get<0>(buffers[0]);
@@ -568,7 +582,7 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
     return 0;
 }
 
-int StreamControl::postRecvWr(int id)
+int StreamControl::postRecvWr(uint64_t id)
 {
     auto &buffer = buffers[id];
     auto buff = std::get<0>(buffer);
@@ -598,6 +612,7 @@ int recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* cl
     StreamControl stream_control(hwrdma, peer_fd, local_conf,  client_list);
     std::shared_ptr<int> x(NULL, [&](int *)
                            {    
+                                printf("auto close\n");
                                 close(peer_fd); 
                                 client_list->removeClient(peer_fd);
                             });

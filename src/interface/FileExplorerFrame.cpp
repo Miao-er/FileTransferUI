@@ -15,11 +15,11 @@ wxBEGIN_EVENT_TABLE(FileExplorerFrame, wxFrame)
     EVT_CLOSE(FileExplorerFrame::OnClose)
 wxEND_EVENT_TABLE()
 
-FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server, StreamControl *stream_control)
+FileExplorerFrame::FileExplorerFrame(wxWindow* parent, const ServerInfo& server, HwRdma *hwrdma, StreamControl *stream_control, LocalConf *localConf)
     : wxFrame(parent, wxID_ANY, 
               wxString::Format("File Explorer - %s", server.name),
               wxDefaultPosition, wxSize(900, 700)),
-      m_serverInfo(server), m_progressDialog(nullptr) , m_streamControl(stream_control){
+      m_serverInfo(server), m_progressDialog(nullptr), m_hwrdma(hwrdma), m_streamControl(stream_control), m_localConf(localConf) {
     InitializeUI();
     PopulateDirectoryTree();
     
@@ -42,8 +42,22 @@ FileExplorerFrame::~FileExplorerFrame() {
     }
     if(m_serverInfo.fd > 0)
     {
+        printf("FileExplorerFrame destructor called, closing socket fd: %d\n", m_serverInfo.fd);
         close(m_serverInfo.fd);
         m_serverInfo.fd = -1;
+    }
+
+    if(m_localConf) {
+        delete m_localConf;
+        m_localConf = nullptr;
+    }
+    if (m_streamControl) {
+        delete m_streamControl;
+        m_streamControl = nullptr;
+    }
+    if (m_hwrdma) {
+        delete m_hwrdma;
+        m_hwrdma = nullptr;
     }
 }
 
@@ -414,7 +428,7 @@ void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
     }
     
     // 创建上传进度对话框
-
+    cout << "[file explorer] m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
     m_progressDialog = new UploadProgressDialog(this, m_selectedFile, m_streamControl);
     printf("progress dialog created\n");
     // 先启动上传线程

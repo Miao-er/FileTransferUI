@@ -12,6 +12,7 @@ class HwRdma
 public:
     HwRdma(int gid_idx, uint64_t buffer_size)
     {
+        cout << "buffer_size: " << buffer_size << endl;
         this->gid_idx = gid_idx;
         this->buffer_size = buffer_size;
         this->free_size = buffer_size;

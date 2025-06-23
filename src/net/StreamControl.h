@@ -44,7 +44,6 @@ private:
     double default_rate;
     uint32_t block_size;
     HwRdma *hwrdma;
-    int peer_fd;
     std::vector<std::tuple<uint8_t *, uint32_t>> buffers;
 
     struct ibv_comp_channel *comp_channel = nullptr;
@@ -54,7 +53,7 @@ private:
     ClientList *client_list = nullptr;
     LocalConf *local_conf = nullptr;
 public:
-
+    int peer_fd;
     StreamControl(HwRdma *hwrdma, int peer_fd, LocalConf *local_conf, ClientList *client_list = nullptr);
 
     ~StreamControl();
@@ -68,7 +67,7 @@ public:
 
     int postRecvFile();
     int postSendFile(const char *file_path, const char *file_name, UploadThread*  upload_thread);
-    int postRecvWr(int id);
+    int postRecvWr(uint64_t id);        
 };
 
 int recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* client_list);

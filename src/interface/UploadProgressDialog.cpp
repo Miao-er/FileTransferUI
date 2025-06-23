@@ -88,7 +88,7 @@ void UploadProgressDialog::InitializeUI() {
     wxBoxSizer* statusBytesSizer = new wxBoxSizer(wxHORIZONTAL);
     statusBytesSizer->Add(m_statusText, 0, wxEXPAND);
     statusBytesSizer->AddStretchSpacer();  // 添加弹性空间，将两个文本分开
-    statusBytesSizer->Add(m_bytesText, 0, wxEXPAND | wxALIGN_RIGHT);
+    statusBytesSizer->Add(m_bytesText, 0, wxEXPAND);
     // wxFlexGridSizer* statusBytesSizer = new wxFlexGridSizer(1, 2, 5, 10);
     // statusBytesSizer->AddGrowableCol(0, 1);  // 第一列可增长，比例为1
     // statusBytesSizer->AddGrowableCol(1, 1);  // 第二列可增长，比例为1
@@ -99,7 +99,7 @@ void UploadProgressDialog::InitializeUI() {
     wxBoxSizer* speedTimeSizer = new wxBoxSizer(wxHORIZONTAL);
     speedTimeSizer->Add(m_speedText, 0, wxEXPAND);
     speedTimeSizer->AddStretchSpacer();  // 添加弹性空间，将两个文本分开
-    speedTimeSizer->Add(m_timeText, 0, wxEXPAND | wxALIGN_RIGHT);
+    speedTimeSizer->Add(m_timeText, 0, wxEXPAND);
 
     // wxFlexGridSizer* speedTimeSizer = new wxFlexGridSizer(1, 2, 5, 10);
     // speedTimeSizer->AddGrowableCol(0, 1);
@@ -164,6 +164,7 @@ wxString UploadProgressDialog::FormatTime(int seconds) {
 
 bool UploadProgressDialog::StartUpload() {
     // 创建上传线程
+    cout << "[progress dialog]m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
     m_uploadThread = new UploadThread(this, m_filepath, m_streamControl);
     
     if (m_uploadThread->Create() != wxTHREAD_NO_ERROR) {
@@ -304,6 +305,7 @@ wxThread::ExitCode UploadThread::Entry() {
             error_code = 0;
             break;
         }
+        cout <<"[thread] m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
         ret = this->m_streamControl->postSendFile(
             wxFileName(m_filepath).GetFullPath().ToStdString().c_str(),
             wxFileName(m_filepath).GetFullName().ToStdString().c_str(),

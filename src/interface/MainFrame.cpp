@@ -199,34 +199,36 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
         SetStatusText("Connection failed");
         return;
     }
-    LocalConf local_conf(getConfigPath());
-    local_conf.loadConf();
-    HwRdma hwrdma(local_conf.getRdmaGidIndex(), (uint64_t)-1);
-    if(hwrdma.init())
+    LocalConf* local_conf = new LocalConf(getConfigPath());
+    local_conf->loadConf();
+    HwRdma* hwrdma = new HwRdma(local_conf->getRdmaGidIndex(), (uint64_t)-1);
+    if(hwrdma->init())
     {
         wxMessageBox(_T("RDMA初始化失败，请检查配置"), _T("初始化错误"), wxOK | wxICON_ERROR, this);
         close(peer_fd);
         SetStatusText("RDMA initialization failed");
+        delete local_conf;
+        delete hwrdma;
         return;
     }
-    StreamControl stream_control(&hwrdma, peer_fd, &local_conf);
+    StreamControl* stream_control = new StreamControl(hwrdma, peer_fd, local_conf);
     int error_code = 0;
     do{
-        if (stream_control.createLucpContext() == -1){
+        if (stream_control->createLucpContext() == -1){
             error_code = -1;
             break;
         }
-        ret = stream_control.connectPeer();
+        ret = stream_control->connectPeer();
         if(ret < 0)
         {
             error_code = ret;
             break;
         }
-        if (stream_control.bindMemoryRegion() == -1){
+        if (stream_control->bindMemoryRegion() == -1){
             error_code = -1;
             break;
         }
-        if (stream_control.createBufferPool() == -1){
+        if (stream_control->createBufferPool() == -1){
             error_code = -1;
             break;
         }    
@@ -236,6 +238,9 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
         wxMessageBox(_T("连接失败，服务器未在线"), _T("连接错误"), wxOK | wxICON_ERROR, this);
         close(peer_fd);
         SetStatusText("Connection failed");
+        delete local_conf;
+        delete stream_control;
+        delete hwrdma;
         return;
     }
     else if(error_code == -1)
@@ -243,13 +248,16 @@ void MainFrame::OnConnect(wxCommandEvent& event) {
         wxMessageBox(_T("连接失败，请检查参数配置"), _T("创建错误"), wxOK | wxICON_ERROR, this);
         close(peer_fd);
         SetStatusText("Connection failed");
+        delete local_conf;
+        delete stream_control;
+        delete hwrdma;
         return;
     }
 
     std::cout << "Connected to " << server.ip.ToStdString().c_str() << ":" << server.port << std::endl;
     server.fd = peer_fd;
     // 创建新的文件浏览器窗口
-    m_explorerFrame = new FileExplorerFrame(this, server, &stream_control);
+    m_explorerFrame = new FileExplorerFrame(this, server, hwrdma, stream_control, local_conf);
     m_explorerFrame->Show(true);
     // 隐藏主窗口
     Hide();

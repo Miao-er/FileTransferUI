@@ -7,6 +7,8 @@
 #include <wx/splitter.h>
 #include <wx/dir.h>
 #include "ServerConfig.h"
+#include "../utils/LocalConf.h"
+#include "../net/HwRdma.h"
 #include "../net/StreamControl.h"
 class UploadProgressDialog;
 
@@ -26,7 +28,7 @@ private:
  */
 class FileExplorerFrame : public wxFrame {
 public:
-    FileExplorerFrame(wxWindow* parent, const ServerInfo& server, StreamControl *stream_control);
+    FileExplorerFrame(wxWindow* parent, const ServerInfo& server, HwRdma *hwrdma, StreamControl *stream_control, LocalConf *localConf);
     virtual ~FileExplorerFrame();
 
 private:
@@ -41,7 +43,11 @@ private:
     
     // 数据
     ServerInfo m_serverInfo;
+
+    HwRdma *m_hwrdma;  // 添加HwRdma成员
     StreamControl *m_streamControl;
+    LocalConf *m_localConf;  // 添加LocalConf成员
+
     wxString m_currentPath;
     wxString m_selectedFile;
     UploadProgressDialog* m_progressDialog;
