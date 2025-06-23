@@ -76,6 +76,7 @@ public:
     UploadThread(UploadProgressDialog* dialog, const wxString& filepath, StreamControl *streamControl);
     ~UploadThread();
     int caculateTransferInfo(unsigned long bytesTransferred, double duration, unsigned long piece_size);
+    bool checkCancel();
 protected:
     virtual ExitCode Entry() override;
     

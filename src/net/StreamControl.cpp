@@ -104,7 +104,6 @@ int StreamControl::sockSyncData(int xfer_size, char *local_data, char *remote_da
     int rc;
     int read_bytes = 0;
     int total_read_bytes = 0;
-    cout << "sync peer_fd: " << this->peer_fd << endl;
     while((rc = send(this->peer_fd, local_data, xfer_size, MSG_NOSIGNAL)) <= 0)
     {
         if (rc == 0 || (rc < 0 && errno != EINTR))
@@ -291,11 +290,22 @@ int StreamControl::connectPeer()
     return changeQPState();
 }
 
+int StreamControl::prepareRecv()
+{
+    int i = 0;
+    for(uint64_t i = 0; i < this->buffers.size(); i++)
+    {
+        auto ret = postRecvWr(i);
+        if(ret < 0)
+        {
+            cout << "ERROR: prepareRecv failed for buffer " << i << endl;
+            return -1;
+        }
+    }
+    return 0;
+}
 int StreamControl::postRecvFile()
 {
-    for(uint64_t i = 0; i < this->buffers.size(); i++)
-        postRecvWr(i);
-
     FileInfo file_info, remote_file_info;
     memcpy(file_info.file_path, "READY_TO_RECEIVE",256);
     file_info.file_size = 0;
@@ -304,24 +314,38 @@ int StreamControl::postRecvFile()
         cout << "ERROR: synchronous failed before post file." << endl;
         return -2;
     }
+    cout << "sync receiving file: " << remote_file_info.file_path << "(" << (double)remote_file_info.file_size/1e9 << "GB)" << endl;
+    
     local_conf->loadConf();
     std::string save_path = local_conf->getSavedFolderPath().ToStdString() + char(wxFileName::GetPathSeparator()) + remote_file_info.file_path;
-    int recv_fd = open(save_path.c_str(), O_CREAT|O_WRONLY, 0777);
+    int recv_fd = open(save_path.c_str(), O_CREAT|O_WRONLY | O_TRUNC, 0777);
+    char sync_char = 'Y';
     if (recv_fd < 0)
     {
         cout << "ERROR: Unable to create file \"" << save_path << "\"!"  << "errno = " << errno << endl;
-        return -1;
+        sync_char = 'N';
+        if(sockSyncData(1, (char *)&sync_char, (char *)&sync_char) == -1)
+            return -2;
+        return 0;
     }
-    std::shared_ptr<int> x(NULL, [&](int *){close(recv_fd);});
-    uint64_t recv_bytes = 0;
     struct ibv_wc *wc = new ibv_wc[buffers.size()];
-    auto t = high_resolution_clock::now();
-    auto t_ = t;
-    double delta_io = 0,delta = 0;
-    int recv_num = 0;
-    char sync_char = 'Y';
+    std::shared_ptr<int> x(NULL, [&](int *){
+        close(recv_fd);
+        delete[] wc;
+    });
     if(sockSyncData(1, (char *)&sync_char, (char *)&sync_char) == -1)
         return -2;
+    cout <<"start receiving file, sync_char: " << sync_char << endl;
+    if(sync_char != 'Y')
+    {
+        cout << "WARNING: remote not ready to send." << endl;
+        return 0;
+    }
+    uint64_t recv_bytes = 0;
+    auto t = high_resolution_clock::now();
+    auto t_last_recv = t;
+    double delta_io = 0,delta = 0;
+    int recv_num = 0;
     while(recv_bytes < remote_file_info.file_size)
     {
         int n = ibv_poll_cq(cq, 1, wc);
@@ -330,15 +354,21 @@ int StreamControl::postRecvFile()
             cout << "ERROR: ibv_poll_cq returned " << n << " - closing connection";
             return -1;
         }
-        else if(n == 0); //std::this_thread::sleep_for(std::chrono::microseconds(1));
+        else if(n == 0) //std::this_thread::sleep_for(std::chrono::microseconds(1));
+        {
+            if(t_last_recv != t && 
+                duration_cast<duration<double>>(high_resolution_clock::now() - t_last_recv).count() *1e9 > this->block_size)
+            {
+                cout << "ERROR: unfinished recv." << endl;
+                return 0;
+            }
+        }
         else{
             //cout << n << endl;
             for (int i = 0; i < n; i++)
             {
                 recv_num ++;
-                // auto delta_ = duration_cast<std::chrono::nanoseconds>(high_resolution_clock::now() - t_).count();
-                // t_ = high_resolution_clock::now();
-                // cout << delta_ << endl;
+                t_last_recv = high_resolution_clock::now();
                 if (wc[i].status != IBV_WC_SUCCESS || wc[i].opcode != IBV_WC_RECV)
                 {
                     fprintf(stderr, "got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
@@ -397,16 +427,26 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
         cout << "ERROR: remote not ready to receive." << endl;
         return -1;
     }
+
     int fd = open(file_path, O_RDONLY);
+    char sync_char = 'Y';
     if (fd < 0)
     {
         cout << "ERROR: Unable to open file \"" << file_path << "\"!" << endl;
+        sync_char = 'N';
+        if (sockSyncData(1, (char *)&sync_char, (char *)&sync_char) < 0)
+        {        
+            return -2;
+        }
         return -1;
     }
-
+    struct ibv_wc *wc = new ibv_wc[buffers.size()];
+    std::shared_ptr<int> x(NULL, [&](int *){
+        close(fd); 
+        delete[] wc;
+        });
     double filesize_GB = (double)(file_info.file_size) * 1.0E-9;
-    // cout << "Sending file: " << file_path << "(" << filesize_GB << " GB)" << endl;
-    std::shared_ptr<int> x(NULL, [&](int *){close(fd);});
+    cout << "Sending file: " << file_path << "(" << filesize_GB << " GB)" << endl;
     struct ibv_send_wr wr, *bad_wr = nullptr;
     struct ibv_sge sge;
     bzero(&wr, sizeof(wr));
@@ -423,9 +463,8 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
     uint32_t Noutstanding_writes = 0;
     double delta_t_io = 0.0;
     
-    uint32_t sendcnt = 0, compcnt = 0;
-    struct ibv_wc *wc = new ibv_wc[buffers.size()];
-    std::list<high_resolution_clock::time_point> uncomplete_tp;
+    uint64_t sendcnt = 0, compcnt = 0;
+    std::list<uint64_t> uncomplete_bytes;
     uint64_t i = 0;
 
     auto buff_size = std::get<1>(buffers[0]);
@@ -437,15 +476,19 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
     // bool unread = false;
     //for(; j < buffers.size() && buff_size * j < file_info.file_size;)
         //readahead(fd,(j++) * buff_size, buff_size);
-    char sync_char = 'Y';
     if(sockSyncData(1, (char *)&sync_char, (char *)&sync_char))
         return -2;
+    cout <<"start sending file, sync_char: " << sync_char << endl;
+    if(sync_char != 'Y')
+    {
+        cout << "WARNING: remote not ready to receive." << endl;
+        return 0;
+    }
     int remaining_recv_wqe = remote_qp_info.block_num;
     auto t1 = high_resolution_clock::now();
-    auto t2 = t1;
-    auto last_time = t1;
-    // std::ofstream fout("rtt.txt");
-    // cout  << "start:" << duration_cast<std::chrono::nanoseconds>(high_resolution_clock::now().time_since_epoch()).count() << endl;
+    auto t2 = t1, t_io = t1;
+
+    double duration_time = 0, duration_io = 0;
     while (1)
     { 
         // if (unread)
@@ -462,34 +505,22 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
                     return -2;
                 else 
                 {
+                    cout << "sync_char: " << sync_char << endl;
                     assert(sync_char == 'A');
                     remaining_recv_wqe++;
                 }
             }
-
-            // read(this->peer_fd, &sync_char, 1);
-            // if(sync_char != 'A')
-            // {
-            //     cout << "ERROR: sync post/recv WQE error." << endl;
-            // }
-            // unread = false; //this cycle has synced.
         }
         //readahead(fd,file_info.file_size - bytes_left, sge.length);
         if(remaining_recv_wqe > 0)
         {
             // Calculate bytes to be sent in this buffer
-            
-            // if(i == 0)
-            // {
-            // auto t_io_start = high_resolution_clock::now();
+            t_io = high_resolution_clock::now();
             read(fd, (char *)sge.addr, bytes_payload);
-            // auto t_io_end = high_resolution_clock::now();
-            // duration<double> duration_io = duration_cast<duration<double>>(t_io_end - t_io_start);
-            // }
-            //cout << "read time: " << duration_io.count() << endl;
-            // delta_t_io += duration_io.count();
-            // t3 = high_resolution_clock::now();
+            duration_io += duration_cast<duration<double>>(high_resolution_clock::now() - t_io).count();
+
             auto ret = ibv_post_send(qp, &wr, &bad_wr);
+            uncomplete_bytes.push_back(bytes_payload);
 
             if (ret != 0)
             {
@@ -508,7 +539,7 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
             auto buff_size = std::get<1>(buffer);
             sge.addr = (uint64_t)buff;
             wr.wr_id = id;
-            auto bytes_payload = buff_size < bytes_left ? buff_size : bytes_left;
+            bytes_payload = buff_size < bytes_left ? buff_size : bytes_left;
             sge.length = bytes_payload;
             // if((i % this->remote_qp_info.recv_depth) == 0) unread = true; //wait for sync
         }
@@ -542,14 +573,41 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
                     // uncomplete_tp.pop_front();
                     compcnt++;
                     Noutstanding_writes--;
-
-                    ack_bytes += wc[i].byte_len;
-                    last_time = high_resolution_clock::now();
-                    auto period = duration_cast<duration<double>>(last_time - t1).count();
-                    int ret = upload_thread->caculateTransferInfo(ack_bytes, period, wc[i].byte_len);
+                    ack_bytes += uncomplete_bytes.front();
+                    t1 = t2;
+                    t2 = high_resolution_clock::now();
+                    auto period = duration_cast<duration<double>>(t2 - t1).count();
+                    duration_time += period;
+                    int ret = upload_thread->caculateTransferInfo(ack_bytes, period, uncomplete_bytes.front());
+                    uncomplete_bytes.pop_front();
                     if(ret < 0)
                     {
                         printf("ERROR: caculateTransferInfo failed because thread cancelled.\n");
+                        while(remaining_recv_wqe < remote_qp_info.block_num)
+                        {
+                            int nb = recv(this->peer_fd, &sync_char, 1, MSG_DONTWAIT);
+                            if(nb == 0) return -2;
+                            else if(nb < 0 && (errno == EWOULDBLOCK || errno == EINTR))
+                                continue;
+                            else if(nb < 0)
+                                return -2;
+                            else 
+                            {
+                                remaining_recv_wqe++;
+                                 cout << "sync_char: " << sync_char << endl;
+                            }
+                        }
+                        //pop all from cq when exit this file stream
+                        while(Noutstanding_writes > 0)
+                        {
+                            int num = ibv_poll_cq(cq, 1, wc);
+                            if (wc[i].status != IBV_WC_SUCCESS)
+                            {
+                                fprintf(stderr, "got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
+                                        wc[i].status, wc[i].vendor_err);
+                            }
+                            Noutstanding_writes--;
+                        }
                         return 1;
                     }
                 }
@@ -558,26 +616,38 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
         if(bytes_left == 0) break;
     }
     t2 = high_resolution_clock::now();
-    delete[] wc;
     cout << endl;
 
-    // Calculate total transfer rate and report.
-    duration<double> delta_t = duration_cast<duration<double>>(t2 - t1);
-    double rate_Gbps = (double)file_info.file_size/ delta_t.count() * 8.0 / 1.0E9;
-    double rate_io_Gbps = (double)file_info.file_size / delta_t_io * 8.0 / 1.0E9;
+    // duration<double> delta_t = duration_cast<duration<double>>(t2 - t1);
+    double rate_Gbps = (double)file_info.file_size/ duration_time * 8.0 / 1.0E9;
+    double rate_io_Gbps = (double)file_info.file_size / duration_io * 8.0 / 1.0E9;
     // cout << duration_cast<duration<double>>(t2 - t1).count() <<  "sec" << endl;
 #ifndef DEBUG
     if (file_info.file_size > 2E8)
     {
-        cout << "  Transferred " << (((double)file_info.file_size) * 1.0E-9) << " GB in " << delta_t.count() << " sec  (" << rate_Gbps << " Gbps)" << endl;
-        // cout << "  I/O rate reading from file: " << delta_t_io << " sec  (" << rate_io_Gbps << " Gbps)" << endl;
+        cout << "  Transferred " << (((double)file_info.file_size) * 1.0E-9) << " GB in " << duration_time << " sec  (" << rate_Gbps << " Gbps)" << endl;
+        cout << "  I/O rate reading from file: " << duration_io << " sec  (" << rate_io_Gbps << " Gbps)" << endl;
     }
     else
     {
-        cout << "  Transferred " << (((double)file_info.file_size) * 1.0E-6) << " MB in " << delta_t.count() << " sec  (" << rate_Gbps * 1000.0 << " Mbps)" << endl;
-        // cout << "  I/O rate reading from file: " << delta_t_io << " sec  (" << rate_io_Gbps * 1000.0 << " Mbps)" << endl;
+        cout << "  Transferred " << (((double)file_info.file_size) * 1.0E-6) << " MB in " << duration_time << " sec  (" << rate_Gbps * 1000.0 << " Mbps)" << endl;
+        cout << "  I/O rate reading from file: " << duration_io << " sec  (" << rate_io_Gbps * 1000.0 << " Mbps)" << endl;
     }
 #endif
+
+    while(remaining_recv_wqe < remote_qp_info.block_num)
+    {
+        int nb = recv(this->peer_fd, &sync_char, 1, MSG_DONTWAIT);
+        if(nb == 0) return -2;
+        else if(nb < 0 && (errno == EWOULDBLOCK || errno == EINTR))
+            continue;
+        else if(nb < 0)
+            return -2;
+        else 
+            remaining_recv_wqe++;
+    }
+    if(upload_thread->checkCancel())
+        return 1;
     close(fd);
     return 0;
 }
@@ -624,7 +694,9 @@ int recvData(HwRdma *hwrdma, int peer_fd,  LocalConf* local_conf, ClientList* cl
         return -1;
     if (stream_control.createBufferPool())
         return -1;
-    while (stream_control.postRecvFile())
+    if( stream_control.prepareRecv())
+        return -1;
+    while (!stream_control.postRecvFile());
         return -1;
     return 0;
 }

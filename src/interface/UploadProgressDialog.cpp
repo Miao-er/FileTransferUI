@@ -164,7 +164,6 @@ wxString UploadProgressDialog::FormatTime(int seconds) {
 
 bool UploadProgressDialog::StartUpload() {
     // 创建上传线程
-    cout << "[progress dialog]m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
     m_uploadThread = new UploadThread(this, m_filepath, m_streamControl);
     
     if (m_uploadThread->Create() != wxTHREAD_NO_ERROR) {
@@ -254,8 +253,8 @@ void UploadProgressDialog::cleanupThread() {
 void UploadProgressDialog::OnCancel(wxCommandEvent& event) {
     m_cancelled = true;
     printf("Upload cancelled by user\n");
-    if(this->IsModal() && this->IsShown())
-        EndModal(wxID_CANCEL);
+    // if(this->IsModal() && this->IsShown())
+    //     EndModal(wxID_CANCEL);
 }
 
 void UploadProgressDialog::OnClose(wxCloseEvent& event) {
@@ -305,7 +304,6 @@ wxThread::ExitCode UploadThread::Entry() {
             error_code = 0;
             break;
         }
-        cout <<"[thread] m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
         ret = this->m_streamControl->postSendFile(
             wxFileName(m_filepath).GetFullPath().ToStdString().c_str(),
             wxFileName(m_filepath).GetFullName().ToStdString().c_str(),
@@ -334,14 +332,23 @@ int UploadThread::caculateTransferInfo(unsigned long bytesTransferred, double du
     
     // 创建进度信息
     ProgressInfo info;
-    info.percentage = (double)bytesTransferred / m_totalSize.ToULong();
+    info.percentage = (double)bytesTransferred / m_totalSize.ToULong() * 100.0;
     info.bytesTransferred = wxULongLong(bytesTransferred);
     info.totalBytes = m_totalSize;
     info.transferRate = transferRate;
     info.status = wxString::Format(_T("正在上传..."));
+    cout << "UploadThread: bytes" << bytes << endl;
+    cout << "UploadThread: Transfer rate: " << transferRate / 1024 << " Kb/s" << endl;
+    cout << "UploadThread: Bytes transferred: " << bytesTransferred << endl;
+    cout << "UploadThread: Percentage: " << info.percentage << "%" << endl;
+    // cout << "UploadThread: Duration: " << duration << " seconds" << endl;
     // 发送进度更新
     SendProgressUpdate(info);
     return 0;
+}
+
+bool UploadThread::checkCancel() {
+    return TestDestroy() || m_dialog->m_cancelled;
 }
 
 wxString UploadThread::FormatFileSize(wxULongLong size) {

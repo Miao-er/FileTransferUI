@@ -42,9 +42,9 @@ private:
     uint8_t *buf_ptr = nullptr;
     struct ibv_mr *mr = nullptr;
     double default_rate;
-    uint32_t block_size;
+    uint64_t block_size;
     HwRdma *hwrdma;
-    std::vector<std::tuple<uint8_t *, uint32_t>> buffers;
+    std::vector<std::tuple<uint8_t *, uint64_t>> buffers;
 
     struct ibv_comp_channel *comp_channel = nullptr;
     struct ibv_cq *cq = nullptr;
@@ -64,7 +64,7 @@ public:
     int sockSyncData(int xfer_size, char *local_data, char *remote_data);
     int changeQPState();
     int connectPeer();
-
+    int prepareRecv();
     int postRecvFile();
     int postSendFile(const char *file_path, const char *file_name, UploadThread*  upload_thread);
     int postRecvWr(uint64_t id);        

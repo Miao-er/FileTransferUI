@@ -428,7 +428,6 @@ void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
     }
     
     // 创建上传进度对话框
-    cout << "[file explorer] m_streamControl->peer_fd: " << m_streamControl->peer_fd << endl;
     m_progressDialog = new UploadProgressDialog(this, m_selectedFile, m_streamControl);
     printf("progress dialog created\n");
     // 先启动上传线程
@@ -455,7 +454,7 @@ void FileExplorerFrame::OnUpload(wxCommandEvent& event) {
         // 直接返回主界面，不使用 CallAfter
         //ReturnToMainFrame();
         printf("complete\n");
-    } else if (result == 0){
+    } else if (result == 0 || result == wxID_CANCEL){
         wxMessageBox("Upload Canceled", "Cancel", wxOK | wxICON_INFORMATION);
     }
     else if(result == -2){
