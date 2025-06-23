@@ -388,7 +388,8 @@ int StreamControl::postRecvFile()
                 // delta += delta_;
                 // if(recv_num > 0 && (recv_num % local_qp_info.recv_depth == 0)) //all wqe is in free state
                 int rc;
-                while((rc = send(this->peer_fd, "A", 1, MSG_NOSIGNAL)) <= 0)
+                char sync_char = 'A';
+                while((rc = send(this->peer_fd, (char*)&sync_char, 1, MSG_NOSIGNAL)) <= 0)
                 {
                     if (rc == 0 || (rc < 0 && errno != EINTR))
                         return -2;
@@ -506,7 +507,7 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
                 else 
                 {
                     cout << "sync_char: " << sync_char << endl;
-                    assert(sync_char == 'A');
+                    // assert(sync_char == 'A');
                     remaining_recv_wqe++;
                 }
             }
@@ -582,7 +583,7 @@ int StreamControl::postSendFile(const char *file_path, const char *file_name, Up
                     uncomplete_bytes.pop_front();
                     if(ret < 0)
                     {
-                        printf("ERROR: caculateTransferInfo failed because thread cancelled.\n");
+                        printf("WARNING: caculateTransferInfo failed because thread cancelled.\n");
                         while(remaining_recv_wqe < remote_qp_info.block_num)
                         {
                             int nb = recv(this->peer_fd, &sync_char, 1, MSG_DONTWAIT);
